@@ -78,7 +78,7 @@ export function WorkspacePanel({
   const [importedTransactions, setImportedTransactions] = useState<Transaction[]>(
     initialTransactions ?? [],
   );
-  const [ready, setReady] = useState(Boolean(transactionsReady && initialTransactions));
+  const [ready, setReady] = useState(Boolean(transactionsReady));
   const [loadError, setLoadError] = useState<string | null>(null);
   const [parseStatus, setParseStatus] = useState<
     | { state: "parsing" }
@@ -88,15 +88,17 @@ export function WorkspacePanel({
   >(null);
   const objectUrls = useRef<string[]>([]);
 
+  // Parent (Dashboard) owns loading — sync when it finishes, including empty lists.
   useEffect(() => {
-    if (initialTransactions) {
-      setImportedTransactions(initialTransactions);
-      setReady(Boolean(transactionsReady));
-    }
+    if (!transactionsReady) return;
+    setImportedTransactions(initialTransactions ?? []);
+    setReady(true);
+    setLoadError(null);
   }, [initialTransactions, transactionsReady]);
 
+  // Standalone use (no parent loader): fetch from API ourselves.
   useEffect(() => {
-    if (initialTransactions) return;
+    if (transactionsReady !== undefined) return;
     let cancelled = false;
     getTransactions()
       .then((rows) => {
@@ -116,7 +118,7 @@ export function WorkspacePanel({
     return () => {
       cancelled = true;
     };
-  }, [initialTransactions]);
+  }, [transactionsReady]);
 
   useEffect(() => {
     return () => {
