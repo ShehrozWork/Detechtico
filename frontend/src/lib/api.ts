@@ -10,7 +10,19 @@ import type {
   User,
 } from "@/lib/api-types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+/**
+ * - Local: NEXT_PUBLIC_API_URL=http://localhost:8000 (default in development)
+ * - Vercel: leave NEXT_PUBLIC_API_URL empty/unset and set API_PROXY_TARGET so
+ *   fetches stay same-origin and Next rewrites proxy to the Paisol API.
+ */
+function resolveApiUrl() {
+  const configured = process.env.NEXT_PUBLIC_API_URL;
+  if (configured !== undefined) return configured.replace(/\/$/, "");
+  if (process.env.NODE_ENV === "production") return "";
+  return "http://localhost:8000";
+}
+
+const API_URL = resolveApiUrl();
 
 class RequestError extends Error {
   code: string;
@@ -58,7 +70,8 @@ async function refreshSession() {
 }
 
 function networkErrorMessage() {
-  return `Could not reach the API at ${API_URL}. Make sure the backend is running and you are using http://localhost:3000 (not the network IP).`;
+  const target = API_URL || "this site (API proxy)";
+  return `Could not reach the API at ${target}. Check that the backend is running and NEXT_PUBLIC_API_URL / API_PROXY_TARGET are set correctly.`;
 }
 
 async function apiFetch(path: string, init: RequestInit = {}, retry = true) {

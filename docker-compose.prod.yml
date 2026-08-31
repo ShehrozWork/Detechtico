@@ -1,0 +1,40 @@
+name: detechtico_v2
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: detechtico
+      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-change_me_admin}
+      POSTGRES_DB: detechtico
+    volumes:
+      - detechtico_v2_pgdata:/var/lib/postgresql/data
+      - ./backend/docker/init.sql:/docker-entrypoint-initdb.d/01-app-role.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U detechtico -d detechtico"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - ./backend/.env.production
+    environment:
+      UPLOAD_DIR: /app/uploads
+    # Public bind so Vercel rewrites can reach the API (firewall 8211/tcp).
+    # Old stack stays on 8210 — do not change that.
+    ports:
+      - "8211:8000"
+    volumes:
+      - detechtico_v2_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  detechtico_v2_pgdata:
+  detechtico_v2_uploads:
