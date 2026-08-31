@@ -5,7 +5,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: detechtico
-      POSTGRES_PASSWORD: ${POSTGRES_ADMIN_PASSWORD:-change_me_admin}
+      POSTGRES_PASSWORD: a7Xk9Mw2PqL5Rz8Nf3Yc
       POSTGRES_DB: detechtico
     volumes:
       - detechtico_v2_pgdata:/var/lib/postgresql/data
@@ -23,9 +23,11 @@ services:
     env_file:
       - ./backend/.env.production
     environment:
+      ADMIN_DATABASE_URL: postgresql://detechtico:a7Xk9Mw2PqL5Rz8Nf3Yc@db:5432/detechtico
+      DATABASE_URL: postgresql://detechtico_app:B4jH6Vt9Km3Zp2Wx7NqC@db:5432/detechtico
       UPLOAD_DIR: /app/uploads
-    # Public bind so Vercel rewrites can reach the API (firewall 8211/tcp).
-    # Old stack stays on 8210 — do not change that.
+      CORS_ORIGINS: https://detechtico.vercel.app
+    # Public so Vercel rewrites can reach the API. Old stack stays on 8210.
     ports:
       - "8211:8000"
     volumes:

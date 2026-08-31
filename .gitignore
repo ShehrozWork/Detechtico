@@ -20,6 +20,7 @@ frontend/next-env.d.ts
 .env.*
 !.env.example
 !**/.env.example
+!backend/.env.production
 
 # python
 __pycache__/

@@ -1,4 +1,4 @@
-CREATE ROLE detechtico_app LOGIN PASSWORD 'detechtico_app_dev_only'
+CREATE ROLE detechtico_app LOGIN PASSWORD 'B4jH6Vt9Km3Zp2Wx7NqC'
   NOSUPERUSER NOCREATEDB NOCREATEROLE;
 
 GRANT CONNECT ON DATABASE detechtico TO detechtico_app;
