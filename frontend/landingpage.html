@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Detechtico — Explainable Fraud Detection</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0b1220;
+  --tint:#d4e9f1;
+  --cyan:#0d7f9e;
+  --card:#199fc2;
+  --card-title:#c9f2fc;
+  --cyan-deep:#0a4257;
+  --footer:#052a38;
+  --primary:#1fcaeb;
+  --primary-ink:#0e8fb0;
+  --line:#e6e8ea;
+  --muted:#5b6670;
+  --wrap:1180px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{font-family:"Outfit",system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);background:#fff;-webkit-font-smoothing:antialiased}
+img,svg{display:block;max-width:100%}
+a{text-decoration:none;color:inherit}
+button{font:inherit;cursor:pointer;border:0;background:none;color:inherit}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 24px}
+:focus-visible{outline:2px solid var(--primary-ink);outline-offset:3px}
+
+/* ---------- header ---------- */
+.header{background:#fff;padding:18px 0}
+.header .inner{display:flex;align-items:center;justify-content:space-between;gap:24px}
+.logo{display:flex;align-items:center;gap:9px;font-size:25px;font-weight:600;letter-spacing:-.5px}
+.logo svg{width:29px;height:29px}
+.nav{display:flex;align-items:center;background:#f1f2f4;border-radius:999px;padding:9px 10px}
+.nav a{font-size:14.5px;color:#2b3440;padding:2px 15px;border-right:1px solid #d5d8dc;line-height:1.1}
+.nav a:last-child{border-right:0}
+.nav a:hover{color:var(--primary-ink)}
+.nav a.active{color:#0e8fb0;font-weight:500}
+.actions{display:flex;align-items:center;gap:12px}
+.btn{display:inline-block;border-radius:999px;font-size:15px;font-weight:600;padding:11px 25px;border:1.5px solid transparent;transition:.18s}
+.btn-dark{background:#0d1117;color:#fff}
+.btn-dark:hover{background:#000}
+.btn-ghost{background:#fff;color:#0d1117;border-color:#d8dbdf}
+.btn-ghost:hover{border-color:#0d1117}
+
+/* ---------- hero ---------- */
+.hero{background:var(--tint);padding:38px 0 42px}
+.hero-card{
+  position:relative;overflow:hidden;border-radius:22px;
+  background:radial-gradient(120% 120% at 78% 38%,#2bb0d2 0%,#0c86a8 42%,#08536b 68%,#04303f 100%);
+  padding:60px 56px;display:grid;grid-template-columns:1.02fr .98fr;align-items:center;gap:34px;
+}
+.hero h1{color:#fff;font-size:39px;line-height:1.22;font-weight:300;letter-spacing:-.5px;max-width:15ch}
+.hero h1 b{font-weight:700}
+.hero p{color:#dff1f7;font-size:14.5px;line-height:1.85;margin-top:22px;max-width:40ch;font-weight:300}
+.hero .cta{display:flex;gap:14px;margin-top:34px;flex-wrap:wrap}
+.hero .cta .btn{padding:15px 30px;font-size:17px;border-radius:10px}
+.hero .cta .btn-dark{background:#0b0f14}
+.hero .cta .btn-line{background:transparent;color:#fff;border-color:rgba(255,255,255,.55)}
+.hero .cta .btn-line:hover{background:rgba(255,255,255,.12)}
+
+/* hero product panel */
+.panel{background:#073344;border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:22px;margin-left:auto;width:100%;max-width:430px;box-shadow:0 22px 46px rgba(0,0,0,.28)}
+.panel .p-top{display:flex;justify-content:space-between;align-items:center;padding-bottom:14px;border-bottom:1px solid rgba(255,255,255,.14)}
+.panel .p-top .t{color:#fff;font-size:14px;font-weight:600}
+.panel .flag{background:#fde68a;color:#7c4a03;font-size:10.5px;font-weight:600;padding:4px 9px;border-radius:999px;letter-spacing:.02em}
+.panel .row{display:flex;align-items:center;gap:16px;padding:16px 0 18px;border-bottom:1px solid rgba(255,255,255,.14)}
+.panel .score{width:64px;height:64px;border-radius:50%;flex:0 0 auto;display:grid;place-items:center;
+  background:conic-gradient(var(--primary) 0 87%,rgba(255,255,255,.16) 87% 100%)}
+.panel .score i{width:50px;height:50px;border-radius:50%;background:#073344;display:grid;place-items:center;
+  font-style:normal;color:#fff;font-size:17px;font-weight:700}
+.panel .row .meta{color:#cfe8f1;font-size:12.5px;line-height:1.6}
+.panel .row .meta b{display:block;color:#fff;font-size:15px;font-weight:600;margin-bottom:2px}
+.panel h4{color:#8fd9ec;font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin:16px 0 12px}
+.panel .factor{margin-bottom:11px}
+.panel .factor .lbl{display:flex;justify-content:space-between;color:#dff1f7;font-size:12.5px;margin-bottom:5px}
+.panel .factor .bar{height:5px;border-radius:3px;background:rgba(255,255,255,.16);overflow:hidden}
+.panel .factor .bar i{display:block;height:100%;background:var(--primary);border-radius:3px}
+
+/* ---------- trust strip ---------- */
+.trust{background:#fff;padding:40px 0}
+.trust ul{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:26px;flex-wrap:wrap}
+.trust li{flex:1 1 150px;display:flex;align-items:center;justify-content:center;gap:10px;color:#38424c;font-size:14.5px;font-weight:500}
+.trust svg{width:22px;height:22px;stroke:var(--cyan);fill:none;stroke-width:1.7;flex:0 0 auto}
+.band{height:26px;background:var(--tint)}
+
+/* ---------- why ---------- */
+.why{background:var(--cyan);padding:64px 0 78px}
+.why-box{border:1px solid rgba(255,255,255,.35);border-radius:14px;padding:60px 46px 68px;position:relative}
+.why-title{text-align:center;color:#8ed9ec;font-size:38px;font-weight:600;letter-spacing:-.3px}
+.why-rule{height:1px;background:rgba(255,255,255,.5);max-width:78%;margin:16px auto 32px}
+.why-sub{text-align:center;color:#fff;font-size:26px;font-weight:700}
+.why-lead{text-align:center;color:#d8f1f8;font-size:14.5px;font-weight:300;line-height:1.8;max-width:58ch;margin:12px auto 36px}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;position:relative}
+.card{background:var(--card);border-radius:11px;padding:26px 24px 30px}
+.card h3{color:var(--card-title);font-size:19px;font-weight:600;line-height:1.28;margin-bottom:14px}
+.card p{color:#eaf9fd;font-size:13px;line-height:1.75;font-weight:300}
+.badge-deco{position:absolute;left:-38px;top:-42px;width:88px;height:88px;pointer-events:none}
+
+/* ---------- comparison ---------- */
+.compare{background:#fff;padding:88px 0}
+.compare h2{font-size:34px;font-weight:700;letter-spacing:-.5px;text-align:center}
+.compare .sub{text-align:center;color:var(--muted);font-size:15px;margin:12px 0 40px}
+.table{max-width:880px;margin:0 auto;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.trow{display:grid;grid-template-columns:1fr 170px 170px;align-items:center;border-bottom:1px solid var(--line)}
+.trow:last-child{border-bottom:0}
+.trow > *{padding:18px 22px}
+.trow .c2,.trow .c3{text-align:center;padding:18px 10px}
+.trow .c2{background:#f0fafd}
+.thead{background:#f7f8f9;font-weight:600;font-size:14px}
+.thead .c2{background:#e0f5fb;color:#0b6f8b}
+.thead .c3{color:#5b6670}
+.trow .feat{font-size:15px}
+.tick,.cross{width:22px;height:22px;margin:0 auto;stroke-width:2.4;fill:none}
+.tick{stroke:#0e8fb0}
+.cross{stroke:#c3cad1}
+
+/* ---------- final cta ---------- */
+.join{background:var(--cyan-deep);padding:70px 0}
+.join .inner{display:flex;align-items:center;justify-content:center;gap:46px;flex-wrap:wrap}
+.join h2{color:#fff;font-size:32px;font-weight:700;text-align:center}
+.join p{color:#c6e3ee;font-size:14px;margin-top:12px;text-align:center;font-weight:300;line-height:1.75;max-width:52ch}
+.join .btn-mint{background:var(--primary);color:#052733;font-size:19px;font-weight:600;padding:17px 38px;border-radius:999px}
+.join .btn-mint:hover{background:#45d5f0}
+
+/* ---------- faq ---------- */
+.faq{background:#fff;padding:80px 0 94px}
+.faq .inner{display:grid;grid-template-columns:.85fr 1.15fr;gap:60px}
+.faq h2{font-size:40px;font-weight:800;line-height:1.15;letter-spacing:-.8px;max-width:9ch}
+.faq .help{margin-top:16px;font-size:14px;color:var(--muted)}
+.faq .help a{color:#0b7d9b}
+.faq ul{list-style:none;border-top:1px solid var(--line)}
+.faq li{border-bottom:1px solid var(--line)}
+.faq li button{width:100%;text-align:left;font-size:15px;padding:22px 8px;transition:color .18s}
+.faq li button:hover{color:#0b7d9b}
+.faq li p{padding:0 8px 22px;font-size:14px;line-height:1.8;color:var(--muted);display:none}
+.faq li.open p{display:block}
+
+/* ---------- footer ---------- */
+.footer{background:var(--footer);color:#e4f0f6;padding:58px 0 0}
+.footer .cols{display:grid;grid-template-columns:1fr 1fr;gap:40px;padding-bottom:50px}
+.footer .logo{color:#fff}
+.footer .tag{margin-top:20px;font-size:14px;color:#dbebf2}
+.footer .follow{margin-top:32px;font-size:15px;font-weight:600}
+.socials{display:flex;gap:14px;margin-top:16px}
+.socials a{width:38px;height:38px;border-radius:50%;background:#0d5a72;display:grid;place-items:center;transition:.18s}
+.socials a:hover{background:#127994}
+.socials svg{width:17px;height:17px;fill:#fff}
+.flinks{display:flex;flex-direction:column;gap:16px;font-size:14px;align-items:flex-start;padding-left:52%}
+.flinks a:hover{color:#8ed9ec}
+.flinks a.active{text-decoration:underline}
+.legal{border-top:1px solid rgba(255,255,255,.14);padding:22px 0 30px;display:flex;justify-content:space-between;gap:20px;flex-wrap:wrap;font-size:13px;color:#cbe0e9}
+.legal .policies{display:flex;gap:22px;flex-wrap:wrap}
+.legal a:hover{color:#fff}
+
+/* ---------- chat ---------- */
+.chat{position:fixed;right:22px;bottom:22px;width:56px;height:56px;border-radius:50%;background:#1fcaeb;display:grid;place-items:center;box-shadow:0 8px 22px rgba(0,0,0,.28)}
+.chat svg{width:26px;height:26px;fill:#052733}
+.chat span{position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;border-radius:50%;background:#e5342b;color:#fff;font-size:12px;font-weight:600;display:grid;place-items:center}
+
+/* ---------- responsive ---------- */
+@media (max-width:980px){
+  .header .inner{flex-wrap:wrap;justify-content:center}
+  .nav{order:3;width:100%;justify-content:center;overflow:auto}
+  .hero-card{grid-template-columns:1fr;padding:44px 30px}
+  .hero h1{font-size:31px;max-width:none}
+  .panel{margin:26px auto 0}
+  .cards{grid-template-columns:1fr}
+  .badge-deco{display:none}
+  .why-box{padding:40px 22px 48px}
+  .why-title{font-size:28px}
+  .trow{grid-template-columns:1fr 90px 90px}
+  .trow > *{padding:15px 14px}
+  .faq .inner{grid-template-columns:1fr;gap:40px}
+  .faq h2{max-width:none;font-size:33px}
+  .flinks{padding-left:0}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<!-- ================= HEADER ================= -->
+<header class="header">
+  <div class="wrap inner">
+    <a class="logo" href="#">
+      <svg viewBox="0 0 32 32" aria-hidden="true">
+        <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#0e9ac0"/><stop offset="1" stop-color="#5cdcf5"/>
+        </linearGradient></defs>
+        <path d="M16 2.5 27 6v9.5c0 7-4.6 12-11 14.5-6.4-2.5-11-7.5-11-14.5V6Z" fill="url(#lg)"/>
+        <circle cx="14.5" cy="14" r="4.6" fill="none" stroke="#052733" stroke-width="1.9"/>
+        <path d="M18 17.6 22 22" stroke="#052733" stroke-width="1.9" stroke-linecap="round"/>
+      </svg>
+      detechtico
+    </a>
+
+    <nav class="nav">
+      <a class="active" href="#">Home</a>
+      <a href="#features">Features</a>
+      <a href="#compare">Compare</a>
+      <a href="#">Pricing</a>
+      <a href="#faq">FAQs</a>
+      <a href="#">Contact</a>
+    </nav>
+
+    <div class="actions">
+      <a class="btn btn-dark" href="#">Log In</a>
+      <a class="btn btn-ghost" href="#">Sign Up</a>
+    </div>
+  </div>
+</header>
+
+<!-- ================= HERO ================= -->
+<section class="hero">
+  <div class="wrap">
+    <div class="hero-card">
+      <div>
+        <h1>Stop Trusting <b>Black Boxes</b> With Your <b>Fraud Detection</b></h1>
+        <p>Most fraud tools tell you what happened. Detechtico shows you why — so your team can investigate faster, reduce false positives, and satisfy auditors with confidence.</p>
+        <div class="cta">
+          <a class="btn btn-dark" href="#">Start Free Trial</a>
+          <a class="btn btn-line" href="#features">See the Platform</a>
+        </div>
+      </div>
+
+      <div class="panel" aria-label="Example flagged transaction with explanation">
+        <div class="p-top">
+          <span class="t">Transaction #48120</span>
+          <span class="flag">Flagged for review</span>
+        </div>
+        <div class="row">
+          <div class="score"><i>87</i></div>
+          <div class="meta">
+            <b>$4,280.00 · Card ending 3391</b>
+            Risk score 87 / 100 · High confidence
+          </div>
+        </div>
+        <h4>Contributing factors</h4>
+        <div class="factor"><div class="lbl"><span>Velocity — 6 attempts / 4 min</span><span>34%</span></div><div class="bar"><i style="width:34%"></i></div></div>
+        <div class="factor"><div class="lbl"><span>Geolocation mismatch</span><span>28%</span></div><div class="bar"><i style="width:28%"></i></div></div>
+        <div class="factor"><div class="lbl"><span>Merchant risk profile</span><span>21%</span></div><div class="bar"><i style="width:21%"></i></div></div>
+        <div class="factor"><div class="lbl"><span>Amount anomaly vs. history</span><span>17%</span></div><div class="bar"><i style="width:17%"></i></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= TRUST STRIP ================= -->
+<section class="trust">
+  <div class="wrap">
+    <ul>
+      <li><svg viewBox="0 0 24 24"><path d="M12 3 20 6v6c0 5-3.4 8.6-8 10-4.6-1.4-8-5-8-10V6Z"/></svg> SOC 2-aligned</li>
+      <li><svg viewBox="0 0 24 24"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg> End-to-end encryption</li>
+      <li><svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg> RLS policies</li>
+      <li><svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6Z"/><path d="M9 12h7M9 16h5"/></svg> Audit-ready reports</li>
+      <li><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg> Built by a forensic accountant</li>
+    </ul>
+  </div>
+</section>
+<div class="band"></div>
+
+<!-- ================= WHY / FEATURES ================= -->
+<section class="why" id="features">
+  <div class="wrap">
+    <div class="why-box">
+      <h2 class="why-title">Why choose Detechtico?</h2>
+      <div class="why-rule"></div>
+      <h3 class="why-sub">Built Different. Built Transparent.</h3>
+      <p class="why-lead">Every feature is designed to give investigators and compliance teams full visibility and control.</p>
+
+      <div class="cards">
+        <svg class="badge-deco" viewBox="0 0 100 100" aria-hidden="true">
+          <path d="M 92.00 50.00 A 12.42 12.42 0 0 1 85.33 27.29 A 12.42 12.42 0 0 1 67.45 11.80 A 12.42 12.42 0 0 1 44.02 8.43 A 12.42 12.42 0 0 1 22.50 18.26 A 12.42 12.42 0 0 1 9.70 38.17 A 12.42 12.42 0 0 1 9.70 61.83 A 12.42 12.42 0 0 1 22.50 81.74 A 12.42 12.42 0 0 1 44.02 91.57 A 12.42 12.42 0 0 1 67.45 88.20 A 12.42 12.42 0 0 1 85.33 72.71 A 12.42 12.42 0 0 1 92.00 50.00 Z"
+                fill="none" stroke="#5cdcf5" stroke-width="2.4"/>
+        </svg>
+
+        <article class="card">
+          <h3>See Why Transactions Are Flagged</h3>
+          <p>Every alert comes with detailed reasoning, confidence scores, and contributing factors. No more guessing.</p>
+        </article>
+        <article class="card">
+          <h3>Rules You Control</h3>
+          <p>Set your own risk thresholds, enable velocity checks, geolocation analysis, and merchant verification — tailored to your industry.</p>
+        </article>
+        <article class="card">
+          <h3>AI That Learns From You</h3>
+          <p>Confirm or override decisions and the system adapts. Your expertise makes the detection smarter over time.</p>
+        </article>
+        <article class="card">
+          <h3>Forensic-Grade Security</h3>
+          <p>Built by a forensic accountant with end-to-end encryption, RLS policies, and SOC 2-aligned architecture.</p>
+        </article>
+        <article class="card">
+          <h3>Audit-Ready Reports</h3>
+          <p>Generate detailed PDF reports from ML analysis results — ready for regulators, auditors, or internal review.</p>
+        </article>
+        <article class="card">
+          <h3>Real-Time Alerts</h3>
+          <p>Get instant notifications when suspicious patterns emerge. Stop fraud before it costs you.</p>
+        </article>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= COMPARISON ================= -->
+<section class="compare" id="compare">
+  <div class="wrap">
+    <h2>Detechtico vs. Traditional Fraud Tools</h2>
+    <p class="sub">See what makes explainable detection different.</p>
+
+    <div class="table">
+      <div class="trow thead">
+        <div class="feat">Feature</div>
+        <div class="c2">Detechtico</div>
+        <div class="c3">Others</div>
+      </div>
+
+      <div class="trow">
+        <div class="feat">Explains WHY transactions are flagged</div>
+        <div class="c2"><svg class="tick" viewBox="0 0 24 24"><path d="m5 13 5 5L19 7"/></svg></div>
+        <div class="c3"><svg class="cross" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></div>
+      </div>
+      <div class="trow">
+        <div class="feat">Customizable risk rules per industry</div>
+        <div class="c2"><svg class="tick" viewBox="0 0 24 24"><path d="m5 13 5 5L19 7"/></svg></div>
+        <div class="c3"><svg class="cross" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></div>
+      </div>
+      <div class="trow">
+        <div class="feat">Learns from investigator feedback</div>
+        <div class="c2"><svg class="tick" viewBox="0 0 24 24"><path d="m5 13 5 5L19 7"/></svg></div>
+        <div class="c3"><svg class="cross" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></div>
+      </div>
+      <div class="trow">
+        <div class="feat">Designed by a forensic accountant</div>
+        <div class="c2"><svg class="tick" viewBox="0 0 24 24"><path d="m5 13 5 5L19 7"/></svg></div>
+        <div class="c3"><svg class="cross" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></div>
+      </div>
+      <div class="trow">
+        <div class="feat">Starts at $29.99/mo</div>
+        <div class="c2"><svg class="tick" viewBox="0 0 24 24"><path d="m5 13 5 5L19 7"/></svg></div>
+        <div class="c3"><svg class="cross" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></div>
+      </div>
+      <div class="trow">
+        <div class="feat">Audit-ready ML reports</div>
+        <div class="c2"><svg class="tick" viewBox="0 0 24 24"><path d="m5 13 5 5L19 7"/></svg></div>
+        <div class="c3"><svg class="cross" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= FINAL CTA ================= -->
+<section class="join">
+  <div class="wrap inner">
+    <div>
+      <h2>Ready to See the Difference?</h2>
+      <p>Start your free 24-hour trial — no credit card required. See exactly why Detechtico is the fraud detection tool your team deserves.</p>
+    </div>
+    <a class="btn btn-mint" href="#">Start Free Trial</a>
+  </div>
+</section>
+
+<!-- ================= FAQ ================= -->
+<section class="faq" id="faq">
+  <div class="wrap inner">
+    <div>
+      <h2>Frequently Asked Questions</h2>
+      <p class="help">Still need help? <a href="#">Contact Us</a></p>
+    </div>
+
+    <ul>
+      <li>
+        <button type="button">What is Detechtico?</button>
+        <p>An explainable fraud detection platform. Every flagged transaction comes with the reasoning, confidence score, and contributing factors behind the decision.</p>
+      </li>
+      <li>
+        <button type="button">How is this different from a black-box model?</button>
+        <p>Black-box tools return a score. Detechtico returns the score plus the factors that produced it, so investigators can act and auditors can verify.</p>
+      </li>
+      <li>
+        <button type="button">Can I set my own risk rules?</button>
+        <p>Yes. Thresholds, velocity checks, geolocation analysis, and merchant verification are all configurable to your industry.</p>
+      </li>
+      <li>
+        <button type="button">Does the free trial require a credit card?</button>
+        <p>No. The 24-hour trial needs no card, and paid plans start at $29.99/mo.</p>
+      </li>
+      <li>
+        <button type="button">What do the audit reports include?</button>
+        <p>Detailed PDF exports of ML analysis results — decisions, factors, and confidence — ready for regulators, auditors, or internal review.</p>
+      </li>
+      <li>
+        <button type="button">How is my data secured?</button>
+        <p>End-to-end encryption, row-level security policies, and SOC 2-aligned architecture designed by a forensic accountant.</p>
+      </li>
+    </ul>
+  </div>
+</section>
+
+<!-- ================= FOOTER ================= -->
+<footer class="footer">
+  <div class="wrap">
+    <div class="cols">
+      <div>
+        <a class="logo" href="#">
+          <svg viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M16 2.5 27 6v9.5c0 7-4.6 12-11 14.5-6.4-2.5-11-7.5-11-14.5V6Z" fill="#5cdcf5"/>
+            <circle cx="14.5" cy="14" r="4.6" fill="none" stroke="#052a38" stroke-width="1.9"/>
+            <path d="M18 17.6 22 22" stroke="#052a38" stroke-width="1.9" stroke-linecap="round"/>
+          </svg>
+          detechtico
+        </a>
+        <p class="tag">Detechtico — Explainable Fraud Detection</p>
+        <p class="follow">Follow Us on</p>
+        <div class="socials">
+          <a href="#" aria-label="LinkedIn"><svg viewBox="0 0 24 24"><path d="M6.9 8.6H3.6V21h3.3ZM5.3 3a1.9 1.9 0 1 0 0 3.9 1.9 1.9 0 0 0 0-3.9ZM21 13.9c0-3.4-1.8-5-4.3-5a3.7 3.7 0 0 0-3.3 1.8V8.6H10V21h3.3v-6.5c0-1.6.8-2.5 2.1-2.5s2 .9 2 2.5V21H21Z"/></svg></a>
+          <a href="#" aria-label="X"><svg viewBox="0 0 24 24"><path d="M17.5 3h3.2l-7 8 8.2 10h-6.4l-5-6.1-5.8 6.1H1.5l7.5-8.6L1.2 3h6.6l4.5 5.6Zm-1.1 16h1.8L7.7 4.9H5.8Z"/></svg></a>
+        </div>
+      </div>
+
+      <nav class="flinks">
+        <a class="active" href="#">Home</a>
+        <a href="#features">Features</a>
+        <a href="#compare">Compare</a>
+        <a href="#">Pricing</a>
+        <a href="#faq">FAQs</a>
+        <a href="#">Contact</a>
+      </nav>
+    </div>
+
+    <div class="legal">
+      <span>© Copyright 2026.</span>
+      <div class="policies">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">Cookies Policy</a>
+        <a href="#">Data Protection Policy</a>
+        <a href="#">Contact Us</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<button class="chat" aria-label="Open chat">
+  <svg viewBox="0 0 24 24"><path d="M12 3c5 0 9 3.4 9 7.6s-4 7.6-9 7.6a11 11 0 0 1-2.6-.3L4 20l1.3-3.3A7.2 7.2 0 0 1 3 10.6C3 6.4 7 3 12 3Z"/></svg>
+  <span>1</span>
+</button>
+
+<script>
+document.querySelectorAll('.faq li button').forEach(function (b) {
+  b.addEventListener('click', function () { b.parentElement.classList.toggle('open'); });
+});
+</script>
+</body>
+</html>

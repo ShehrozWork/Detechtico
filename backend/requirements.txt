@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg[binary]
+pydantic-settings
+email-validator
+argon2-cffi
+PyJWT
+python-multipart
+anthropic==0.68.1
+python-docx
+openpyxl
+pandas==2.2.3
+numpy==1.26.4
+pillow
+alembic

@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+:root {
+  --canvas: #ffffff;
+  --surface: #f1f2f4;
+  --sunken: #e0f5fb;
+  --hairline: #e6e8ea;
+  --line: #d8dbdf;
+  --ink: #0b1220;
+  --body: #38424c;
+  --subtle: #5b6670;
+  --primary: #0d7f9e;
+  --primary-hover: #0b6f8b;
+  --primary-deep: #0a4257;
+  --primary-mid: #199fc2;
+  --primary-soft: #1fcaeb;
+  --primary-pale: #c9f2fc;
+  --primary-tint: #d4e9f1;
+  --footer: #052a38;
+}
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-sunken: var(--sunken);
+  --color-hairline: var(--hairline);
+  --color-line: var(--line);
+  --color-ink: var(--ink);
+  --color-body: var(--body);
+  --color-subtle: var(--subtle);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-deep: var(--primary-deep);
+  --color-primary-mid: var(--primary-mid);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-pale: var(--primary-pale);
+  --color-primary-tint: var(--primary-tint);
+  --color-footer: var(--footer);
+  --font-sans: var(--font-hanken-grotesk);
+  --font-mono: var(--font-hanken-grotesk);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-hanken-grotesk), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+.scrollbar-thin-surface {
+  scrollbar-width: thin;
+  scrollbar-color: var(--subtle) var(--surface);
+}
+
+.scrollbar-thin-surface::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.scrollbar-thin-surface::-webkit-scrollbar-track {
+  background: var(--surface);
+}
+
+.scrollbar-thin-surface::-webkit-scrollbar-thumb {
+  background: var(--subtle);
+  border-radius: 999px;
+}
+
+.scrollbar-thin-surface::-webkit-scrollbar-thumb:hover {
+  background: var(--ink);
+}
+
+button {
+  cursor: pointer;
+}
+
+.range-primary {
+  accent-color: var(--primary);
+}
+
+.range-primary::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--primary);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--primary);
+  cursor: pointer;
+}
+
+.range-primary::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--primary);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px var(--primary);
+  cursor: pointer;
+}
+
+.range-primary::-moz-range-track {
+  background: transparent;
+}
