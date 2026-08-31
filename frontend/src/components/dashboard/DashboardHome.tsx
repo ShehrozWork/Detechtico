@@ -59,7 +59,7 @@ export function DashboardHome() {
     let cancelled = false;
     Promise.all([
       listJobs(),
-      getTransactions(),
+      getTransactions().catch(() => [] as Transaction[]),
       getLearningSummary().catch(() => null),
       getNetworkSummary().catch(() => null),
     ])

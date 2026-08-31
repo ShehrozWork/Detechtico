@@ -213,22 +213,22 @@ export async function importTransactions(
 }
 
 export async function getTransactions() {
-  const response = await apiFetch("/transactions/");
+  const response = await apiFetch("/transactions");
   return parseBody<Transaction[]>(response, "Unable to load transactions.");
 }
 
 export async function clearTransactions() {
-  const response = await apiFetch("/transactions/", { method: "DELETE" });
+  const response = await apiFetch("/transactions", { method: "DELETE" });
   await parseBody<void>(response, "Unable to clear imported transactions.");
 }
 
 export async function getRiskSettings() {
-  const response = await apiFetch("/risk-settings/");
+  const response = await apiFetch("/risk-settings");
   return parseBody<RiskSettings>(response, "Unable to load risk settings.");
 }
 
 export async function updateRiskSettings(settings: RiskSettings) {
-  const response = await apiFetch("/risk-settings/", {
+  const response = await apiFetch("/risk-settings", {
     method: "PUT",
     body: JSON.stringify(settings),
   });

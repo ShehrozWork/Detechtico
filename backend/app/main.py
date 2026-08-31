@@ -63,6 +63,8 @@ def create_app() -> FastAPI:
         redoc_url=None if settings.is_production else "/redoc",
         openapi_url=None if settings.is_production else "/openapi.json",
         lifespan=lifespan,
+        # Avoid 307 redirects to absolute http://host URLs (breaks Vercel HTTPS proxy).
+        redirect_slashes=False,
     )
 
     app.add_middleware(SecurityHeadersMiddleware)

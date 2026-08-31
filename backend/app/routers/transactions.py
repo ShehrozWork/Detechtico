@@ -46,7 +46,8 @@ def import_transactions(
     return rows
 
 
-@router.get("/", response_model=list[TransactionOut])
+@router.get("", response_model=list[TransactionOut])
+@router.get("/", response_model=list[TransactionOut], include_in_schema=False)
 def list_transactions(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -95,7 +96,8 @@ def delete_transaction(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.delete("/", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
+@router.delete("", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
+@router.delete("/", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None, include_in_schema=False)
 def clear_transactions(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

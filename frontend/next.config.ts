@@ -19,11 +19,15 @@ const nextConfig: NextConfig = {
       { source: "/jobs/:path*", destination: `${API_PROXY_TARGET}/jobs/:path*` },
       { source: "/documents", destination: `${API_PROXY_TARGET}/documents` },
       { source: "/documents/:path*", destination: `${API_PROXY_TARGET}/documents/:path*` },
+      // Explicit trailing-slash variants — Vercel can normalize these and
+      // FastAPI slash-redirects to http://IP break HTTPS pages.
       { source: "/transactions", destination: `${API_PROXY_TARGET}/transactions` },
+      { source: "/transactions/", destination: `${API_PROXY_TARGET}/transactions` },
       { source: "/transactions/:path*", destination: `${API_PROXY_TARGET}/transactions/:path*` },
       { source: "/network/:path*", destination: `${API_PROXY_TARGET}/network/:path*` },
       { source: "/learning/:path*", destination: `${API_PROXY_TARGET}/learning/:path*` },
       { source: "/risk-settings", destination: `${API_PROXY_TARGET}/risk-settings` },
+      { source: "/risk-settings/", destination: `${API_PROXY_TARGET}/risk-settings` },
       { source: "/risk-settings/:path*", destination: `${API_PROXY_TARGET}/risk-settings/:path*` },
       { source: "/findings/:path*", destination: `${API_PROXY_TARGET}/findings/:path*` },
     ];

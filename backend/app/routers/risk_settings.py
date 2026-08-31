@@ -16,7 +16,8 @@ from app.services.risk_settings import (
 router = APIRouter(prefix="/risk-settings", tags=["risk-settings"])
 
 
-@router.get("/", response_model=RiskSettingsOut)
+@router.get("", response_model=RiskSettingsOut)
+@router.get("/", response_model=RiskSettingsOut, include_in_schema=False)
 def get_risk_settings(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -25,7 +26,8 @@ def get_risk_settings(
     return RiskSettingsOut(**settings_to_dict(row))
 
 
-@router.put("/", response_model=RiskSettingsOut)
+@router.put("", response_model=RiskSettingsOut)
+@router.put("/", response_model=RiskSettingsOut, include_in_schema=False)
 def update_risk_settings(
     payload: RiskSettingsUpdate,
     user: User = Depends(get_current_user),
