@@ -333,6 +333,17 @@ function parseCsvGrid(text: string): string[][] {
 const SUPPORTED_COLUMNS =
   "Merchant/Vendor/Payee/Description, Amount/Debit/Credit, Date, and optionally Risk and Status";
 
+/** Backend + Vercel-safe batch size for /transactions/import */
+export const MAX_TRANSACTION_IMPORT_ROWS = 5000;
+
+function assertImportRowLimit(rows: ParsedTransaction[]) {
+  if (rows.length > MAX_TRANSACTION_IMPORT_ROWS) {
+    throw new Error(
+      `This file has ${rows.length.toLocaleString()} rows. Import supports up to ${MAX_TRANSACTION_IMPORT_ROWS.toLocaleString()} rows per file — split the file and upload in batches.`,
+    );
+  }
+}
+
 export async function parseTransactionsFile(
   file: File,
   options?: {
@@ -352,6 +363,7 @@ export async function parseTransactionsFile(
         `Could not find recognizable transaction columns. Expected headers like: ${SUPPORTED_COLUMNS}.`,
       );
     }
+    assertImportRowLimit(rows);
     return rows;
   }
 
@@ -374,6 +386,7 @@ export async function parseTransactionsFile(
         `Could not find recognizable transaction fields. Expected keys like: ${SUPPORTED_COLUMNS}.`,
       );
     }
+    assertImportRowLimit(rows);
     return rows;
   }
 
@@ -394,6 +407,7 @@ export async function parseTransactionsFile(
         `Could not find recognizable transaction columns. Expected headers like: ${SUPPORTED_COLUMNS}.`,
       );
     }
+    assertImportRowLimit(rows);
     return rows;
   }
 

@@ -113,6 +113,19 @@ async function parseBody<T>(response: Response, fallback: string): Promise<T> {
   if (response.status === 204) {
     return undefined as T;
   }
+  if (response.status === 502 || response.status === 504) {
+    throw new RequestError({
+      code: "proxy_error",
+      message:
+        "Upload failed through the hosting proxy (file too large or timed out). Use Dashboard → Import for ledger CSVs (max 5,000 rows), or upload a smaller statement file under ~4 MB.",
+    });
+  }
+  if (response.status === 413) {
+    throw new RequestError({
+      code: "payload_too_large",
+      message: "That file is too large to upload. Try a smaller file (under ~4 MB on Vercel).",
+    });
+  }
   const data: unknown = await response.json().catch(() => null);
   if (!response.ok) {
     throw new RequestError(readApiError(data, fallback));

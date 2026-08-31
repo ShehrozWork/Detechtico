@@ -19,6 +19,9 @@ import { cn } from "@/utils/cn";
 
 const ACCEPT = ".csv,.json,.xlsx,.xls,.pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.webp,.tif,.tiff";
 
+/** Vercel request body proxy limit is ~4.5 MB — stay under it for reliable uploads. */
+const MAX_STATEMENT_UPLOAD_BYTES = 4 * 1024 * 1024;
+
 const statementLabel: Record<StatementType, string> = {
   "balance-sheet": "Balance Sheet",
   income: "Income Statement",
@@ -124,6 +127,19 @@ export function StatementAnalysisContent() {
       setError("Choose a file to analyze.");
       return;
     }
+    if (file.size > MAX_STATEMENT_UPLOAD_BYTES) {
+      setError(
+        `This file is ${(file.size / (1024 * 1024)).toFixed(1)} MB. Statement Analysis through Vercel supports about 4 MB max. For large ledger CSVs, use Dashboard → Import (up to 5,000 rows per batch).`,
+      );
+      return;
+    }
+    const lower = file.name.toLowerCase();
+    if (lower.endsWith(".csv") && file.size > 512 * 1024) {
+      setError(
+        "Large CSVs belong on Dashboard → Import (transaction ledger), not Statement Analysis. Statement Analysis is for balance sheets / income / cash-flow documents.",
+      );
+      return;
+    }
     setError(null);
     setPending(true);
     setJob(null);
@@ -223,8 +239,8 @@ export function StatementAnalysisContent() {
               {file?.name ?? "No file chosen"}
             </p>
             <p className="mt-2 max-w-[46ch] text-[13.5px] font-light leading-[1.7] text-subtle">
-              PDF, images, CSV, Excel, Word, or text. Maximum 25 MB. Executables
-              and archives are rejected.
+              PDF, images, Excel, Word, or short text/CSV extracts. Keep files under ~4 MB.
+              For large transaction ledgers, use Dashboard → Import (max 5,000 rows per file).
             </p>
             <input
               type="file"
