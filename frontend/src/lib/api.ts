@@ -95,6 +95,7 @@ async function apiFetch(path: string, init: RequestInit = {}, retry = true) {
   const skipRefresh =
     path === "/auth/login" ||
     path === "/auth/signup" ||
+    path === "/auth/signup/confirm" ||
     path === "/auth/refresh" ||
     path === "/auth/forgot-password" ||
     path === "/auth/reset-password";
@@ -147,7 +148,7 @@ export async function login(email: string, password: string, remember: boolean) 
   return parseBody<User>(response, "Invalid email or password.");
 }
 
-export async function signup(input: {
+export async function requestSignup(input: {
   name: string;
   email: string;
   password: string;
@@ -157,7 +158,20 @@ export async function signup(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
-  return parseBody<User>(response, "Unable to create your account.");
+  return parseBody<{
+    message: string;
+    email: string;
+    expires_in_seconds: number;
+    resend_after_seconds: number;
+  }>(response, "Unable to start signup.");
+}
+
+export async function confirmSignup(email: string, otp: string) {
+  const response = await apiFetch("/auth/signup/confirm", {
+    method: "POST",
+    body: JSON.stringify({ email, otp }),
+  });
+  return parseBody<User>(response, "Unable to verify your email.");
 }
 
 export async function logout() {
@@ -279,6 +293,105 @@ export async function updateTransactionStatus(
     body: JSON.stringify({ status }),
   });
   return parseBody<Transaction>(response, "Unable to update transaction status.");
+}
+
+export async function updateProfile(name: string) {
+  const response = await apiFetch("/auth/me", {
+    method: "PATCH",
+    body: JSON.stringify({ name }),
+  });
+  return parseBody<User>(response, "Unable to update your profile.");
+}
+
+export async function verifyPassword(currentPassword: string) {
+  const response = await apiFetch("/auth/verify-password", {
+    method: "POST",
+    body: JSON.stringify({ current_password: currentPassword }),
+  });
+  await parseBody<void>(response, "Unable to verify password.");
+}
+
+export async function requestEmailChange(newEmail: string, currentPassword: string) {
+  const response = await apiFetch("/auth/email-change/request", {
+    method: "POST",
+    body: JSON.stringify({
+      new_email: newEmail,
+      current_password: currentPassword,
+    }),
+  });
+  return parseBody<{
+    message: string;
+    new_email: string;
+    expires_in_seconds: number;
+    resend_after_seconds: number;
+  }>(response, "Unable to start email change.");
+}
+
+export async function confirmEmailChange(otp: string) {
+  const response = await apiFetch("/auth/email-change/confirm", {
+    method: "POST",
+    body: JSON.stringify({ otp }),
+  });
+  return parseBody<User>(response, "Unable to confirm email change.");
+}
+
+export async function revertEmailChange(token: string) {
+  const response = await apiFetch("/auth/email-change/revert", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+  return parseBody<User>(response, "Unable to revert email change.");
+}
+
+export async function changePassword(currentPassword: string, newPassword: string) {
+  const response = await apiFetch("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify({
+      current_password: currentPassword,
+      new_password: newPassword,
+    }),
+  });
+  return parseBody<User>(response, "Unable to change your password.");
+}
+
+export async function createCheckoutSession(
+  planId: "essential" | "professional",
+  billingPeriod: "monthly" | "annual",
+) {
+  const response = await apiFetch("/billing/checkout-session", {
+    method: "POST",
+    body: JSON.stringify({ plan_id: planId, billing_period: billingPeriod }),
+  });
+  return parseBody<{ url: string }>(response, "Unable to start checkout.");
+}
+
+export async function createPortalSession() {
+  const response = await apiFetch("/billing/portal-session", {
+    method: "POST",
+  });
+  return parseBody<{ url: string }>(response, "Unable to open billing portal.");
+}
+
+export async function confirmCheckoutSession(sessionId: string) {
+  const response = await apiFetch("/billing/confirm-session", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+  return parseBody<User>(response, "Unable to confirm checkout.");
+}
+
+export async function cancelSubscription() {
+  const response = await apiFetch("/billing/cancel-subscription", {
+    method: "POST",
+  });
+  return parseBody<User>(response, "Unable to cancel subscription.");
+}
+
+export async function resumeSubscription() {
+  const response = await apiFetch("/billing/resume-subscription", {
+    method: "POST",
+  });
+  return parseBody<User>(response, "Unable to resume subscription.");
 }
 
 export { RequestError };

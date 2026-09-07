@@ -63,9 +63,12 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+WEBHOOK_PATH = "/webhooks/stripe"
+
+
 class OriginGuardMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        if request.method in MUTATING:
+        if request.method in MUTATING and request.url.path != WEBHOOK_PATH:
             origin = request.headers.get("origin")
             settings = get_settings()
             if not origin or not origin_allowed(origin, settings):
@@ -78,6 +81,8 @@ class OriginGuardMiddleware(BaseHTTPMiddleware):
 
 class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        if request.url.path == WEBHOOK_PATH:
+            return await call_next(request)
         ip = client_ip(request)
         if not limiter.allow(f"ip:{ip}", 120, 60):
             return JSONResponse(

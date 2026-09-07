@@ -31,6 +31,34 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-5"
     analysis_require_llm: bool = False
+    stripe_secret_key: str = ""
+    stripe_webhook_secret: str = ""
+    stripe_price_essential_monthly: str = ""
+    stripe_price_essential_annual: str = ""
+    stripe_price_professional_monthly: str = ""
+    stripe_price_professional_annual: str = ""
+    smtp_host: str = ""
+    smtp_port: int = Field(default=587, ge=1, le=65535)
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_from_name: str = "Detechtico"
+    smtp_use_tls: bool = True
+
+    @field_validator(
+        "stripe_secret_key",
+        "stripe_webhook_secret",
+        "stripe_price_essential_monthly",
+        "stripe_price_essential_annual",
+        "stripe_price_professional_monthly",
+        "stripe_price_professional_annual",
+        mode="before",
+    )
+    @classmethod
+    def strip_stripe_values(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().strip('"').strip("'")
+        return value
 
     @field_validator("jwt_secret")
     @classmethod

@@ -22,7 +22,8 @@ export type IconName =
   | "link-2"
   | "check-circle"
   | "file-up"
-  | "layout";
+  | "layout"
+  | "user";
 
 const paths: Record<IconName, ReactNode> = {
   eye: (
@@ -160,6 +161,12 @@ const paths: Record<IconName, ReactNode> = {
       <rect x="14" y="3" width="7" height="5" rx="1.5" />
       <rect x="14" y="12" width="7" height="9" rx="1.5" />
       <rect x="3" y="16" width="7" height="5" rx="1.5" />
+    </>
+  ),
+  user: (
+    <>
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5.5 19a6.5 6.5 0 0 1 13 0" />
     </>
   ),
 };

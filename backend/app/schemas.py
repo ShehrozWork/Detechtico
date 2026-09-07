@@ -41,6 +41,31 @@ class SignupRequest(BaseModel):
         return value
 
 
+class ConfirmSignupRequest(BaseModel):
+    email: EmailStr
+    otp: str = Field(min_length=6, max_length=6)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: EmailStr) -> str:
+        return str(value).strip().lower()
+
+    @field_validator("otp")
+    @classmethod
+    def digits_only(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned.isdigit() or len(cleaned) != 6:
+            raise ValueError("Enter the 6-digit code from your email")
+        return cleaned
+
+
+class SignupRequestedOut(BaseModel):
+    message: str
+    email: str
+    expires_in_seconds: int = 600
+    resend_after_seconds: int = 60
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str = Field(min_length=1, max_length=128)
@@ -66,6 +91,60 @@ class ResetPasswordRequest(BaseModel):
     password: str = Field(min_length=12, max_length=128)
 
 
+class UpdateProfileRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        cleaned = " ".join(value.split())
+        if not cleaned:
+            raise ValueError("Name is required")
+        return cleaned
+
+
+class RequestEmailChangeRequest(BaseModel):
+    new_email: EmailStr
+    current_password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("new_email")
+    @classmethod
+    def normalize_email(cls, value: EmailStr) -> str:
+        return str(value).strip().lower()
+
+
+class ConfirmEmailChangeRequest(BaseModel):
+    otp: str = Field(min_length=6, max_length=6)
+
+    @field_validator("otp")
+    @classmethod
+    def digits_only(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned.isdigit() or len(cleaned) != 6:
+            raise ValueError("Enter the 6-digit code from your email")
+        return cleaned
+
+
+class RevertEmailChangeRequest(BaseModel):
+    token: str = Field(min_length=20, max_length=200)
+
+
+class EmailChangeRequestedOut(BaseModel):
+    message: str
+    new_email: str
+    expires_in_seconds: int = 600
+    resend_after_seconds: int = 60
+
+
+class VerifyPasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=12, max_length=128)
+
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -73,6 +152,40 @@ class UserOut(BaseModel):
     email: str
     name: str
     created_at: datetime
+    trial_ends_at: datetime
+    trial_active: bool
+    plan_id: Optional[str] = None
+    subscription_status: str = "none"
+    billing_period: Optional[str] = None
+    current_period_end: Optional[datetime] = None
+    cancel_at_period_end: bool = False
+    entitled: bool = False
+
+
+class CheckoutSessionRequest(BaseModel):
+    plan_id: Literal["essential", "professional"]
+    billing_period: Literal["monthly", "annual"]
+
+
+class CheckoutSessionOut(BaseModel):
+    url: str
+
+
+class PortalSessionOut(BaseModel):
+    url: str
+
+
+class ConfirmSessionRequest(BaseModel):
+    session_id: str = Field(min_length=1, max_length=255)
+
+
+class BillingStatusOut(BaseModel):
+    plan_id: Optional[str] = None
+    subscription_status: str
+    billing_period: Optional[str] = None
+    current_period_end: Optional[datetime] = None
+    cancel_at_period_end: bool
+    entitled: bool
     trial_ends_at: datetime
     trial_active: bool
 

@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.deps import get_current_user
+from app.deps import require_entitled
 from app.errors import FORBIDDEN, RATE_LIMITED, error
 from app.middleware import client_ip
 from app.models import AnalysisJob, Document, FindingDisposition, User
@@ -81,7 +81,7 @@ async def upload_and_analyze(
     background: BackgroundTasks,
     file: UploadFile = File(...),
     statement_type: str | None = Form(default=None),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_entitled),
     db: Session = Depends(get_db),
 ) -> JobOut:
     ip = client_ip(request)
@@ -121,7 +121,7 @@ async def upload_and_analyze(
 
 @router.get("/jobs", response_model=list[JobSummaryOut])
 def list_jobs(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_entitled),
     db: Session = Depends(get_db),
 ) -> list[JobSummaryOut]:
     jobs = list(
@@ -139,7 +139,7 @@ def list_jobs(
 @router.get("/jobs/{job_id}", response_model=JobOut)
 def get_job(
     job_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_entitled),
     db: Session = Depends(get_db),
 ) -> JobOut:
     job = db.scalar(
@@ -172,7 +172,7 @@ def get_job(
 )
 def delete_document(
     document_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_entitled),
     db: Session = Depends(get_db),
 ) -> Response:
     document = db.get(Document, document_id)

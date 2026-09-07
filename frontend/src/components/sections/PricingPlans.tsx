@@ -1,13 +1,16 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { Container } from "@/components/ui/Container";
 import { Icon } from "@/components/ui/Icon";
 import {
   type BillingPeriod,
   pricingPlans,
 } from "@/data/pricing";
+import { useAuth } from "@/context/AuthContext";
 import { useTrialHref } from "@/hooks/useTrialHref";
+import { createCheckoutSession, createPortalSession, RequestError } from "@/lib/api";
 import { cn } from "@/utils/cn";
 
 type PricingPlansProps = {
@@ -24,7 +27,11 @@ export function PricingPlans({
   showSalesNote = variant === "subscribe",
 }: PricingPlansProps) {
   const [billing, setBilling] = useState<BillingPeriod>("annual");
+  const [busyPlan, setBusyPlan] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const trialHref = useTrialHref();
+  const { user, isReady } = useAuth();
+  const router = useRouter();
 
   const heading =
     title ?? (
@@ -36,6 +43,47 @@ export function PricingPlans({
   const lead =
     description ??
     "Select one of our subscription plans to access all features including sign-in, registration and dashboard.";
+
+  async function startCheckout(planId: string) {
+    if (planId !== "essential" && planId !== "professional") return;
+    setError(null);
+    if (!isReady) {
+      setError("Checking your session… try again in a moment.");
+      return;
+    }
+    if (!user) {
+      router.push(`/login?next=${encodeURIComponent("/subscribe")}`);
+      return;
+    }
+    setBusyPlan(planId);
+    try {
+      if (
+        user.subscription_status === "active" ||
+        user.subscription_status === "trialing"
+      ) {
+        const portal = await createPortalSession();
+        window.location.href = portal.url;
+        return;
+      }
+      const session = await createCheckoutSession(planId, billing);
+      if (!session.url) {
+        throw new Error("Checkout did not return a URL.");
+      }
+      window.location.assign(session.url);
+    } catch (err) {
+      if (err instanceof RequestError && err.code === "already_subscribed") {
+        try {
+          const portal = await createPortalSession();
+          window.location.assign(portal.url);
+          return;
+        } catch {
+          /* fall through */
+        }
+      }
+      setError(err instanceof Error ? err.message : "Unable to start checkout.");
+      setBusyPlan(null);
+    }
+  }
 
   return (
     <section id="pricing" className="bg-canvas py-14 sm:py-20">
@@ -64,6 +112,11 @@ export function PricingPlans({
           >
             {lead}
           </p>
+          {error && (
+            <p className="mt-4 text-[14px] font-medium text-[#9f1239]" role="alert">
+              {error}
+            </p>
+          )}
         </div>
 
         <div className="mt-10 flex justify-center">
@@ -119,6 +172,9 @@ export function PricingPlans({
               variant === "platform" && plan.platformCta
                 ? plan.platformCta
                 : plan.cta;
+            const isCheckoutPlan =
+              plan.id === "essential" || plan.id === "professional";
+            const busy = busyPlan === plan.id;
 
             return (
               <article
@@ -170,17 +226,33 @@ export function PricingPlans({
                 </ul>
 
                 <div className="mt-8 flex flex-col gap-3">
-                  <a
-                    href={primaryCta.trial ? trialHref : primaryCta.href}
-                    className={cn(
-                      "inline-flex items-center justify-center rounded-full px-6 py-3.5 text-[15px] font-semibold transition-colors",
-                      plan.popular
-                        ? "bg-primary text-white hover:bg-primary-hover"
-                        : "bg-ink text-white hover:bg-black",
-                    )}
-                  >
-                    {primaryCta.label}
-                  </a>
+                  {isCheckoutPlan && !primaryCta.trial ? (
+                    <button
+                      type="button"
+                      disabled={Boolean(busyPlan)}
+                      onClick={() => startCheckout(plan.id)}
+                      className={cn(
+                        "inline-flex items-center justify-center rounded-full px-6 py-3.5 text-[15px] font-semibold transition-colors disabled:opacity-60",
+                        plan.popular
+                          ? "bg-primary text-white hover:bg-primary-hover"
+                          : "bg-ink text-white hover:bg-black",
+                      )}
+                    >
+                      {busy ? "Redirecting…" : primaryCta.label}
+                    </button>
+                  ) : (
+                    <a
+                      href={primaryCta.trial ? trialHref : primaryCta.href}
+                      className={cn(
+                        "inline-flex items-center justify-center rounded-full px-6 py-3.5 text-[15px] font-semibold transition-colors",
+                        plan.popular
+                          ? "bg-primary text-white hover:bg-primary-hover"
+                          : "bg-ink text-white hover:bg-black",
+                      )}
+                    >
+                      {primaryCta.label}
+                    </a>
+                  )}
                   {plan.secondaryCta && (
                     <a
                       href={

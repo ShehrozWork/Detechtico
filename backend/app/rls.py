@@ -62,6 +62,14 @@ RLS_STATEMENTS = [
       USING (user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid);
     """,
+    """
+    ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE subscriptions FORCE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS subscriptions_owner ON subscriptions;
+    CREATE POLICY subscriptions_owner ON subscriptions
+      USING (user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid)
+      WITH CHECK (user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid);
+    """,
 ]
 
 

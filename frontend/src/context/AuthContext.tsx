@@ -9,7 +9,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { getMe, login as loginRequest, logout as logoutRequest, signup as signupRequest } from "@/lib/api";
+import {
+  confirmSignup as confirmSignupRequest,
+  getMe,
+  login as loginRequest,
+  logout as logoutRequest,
+  requestSignup as requestSignupApi,
+} from "@/lib/api";
 import type { User } from "@/lib/api-types";
 
 type AuthContextValue = {
@@ -17,13 +23,21 @@ type AuthContextValue = {
   isLoggedIn: boolean;
   isReady: boolean;
   login: (email: string, password: string, remember: boolean) => Promise<void>;
-  signup: (input: {
+  requestSignup: (input: {
     name: string;
     email: string;
     password: string;
     acceptedTerms: boolean;
-  }) => Promise<void>;
+  }) => Promise<{
+    message: string;
+    email: string;
+    expires_in_seconds: number;
+    resend_after_seconds: number;
+  }>;
+  confirmSignup: (email: string, otp: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<User | null>;
+  setUser: (user: User | null) => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -56,23 +70,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(current);
   }, []);
 
-  const signup = useCallback(
+  const requestSignup = useCallback(
     async (input: {
       name: string;
       email: string;
       password: string;
       acceptedTerms: boolean;
     }) => {
-      const current = await signupRequest({
+      return requestSignupApi({
         name: input.name,
         email: input.email,
         password: input.password,
         accepted_terms: input.acceptedTerms,
       });
-      setUser(current);
     },
     [],
   );
+
+  const confirmSignup = useCallback(async (email: string, otp: string) => {
+    const current = await confirmSignupRequest(email, otp);
+    setUser(current);
+  }, []);
 
   const logout = useCallback(async () => {
     try {
@@ -82,16 +100,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const current = await getMe();
+    setUser(current);
+    return current;
+  }, []);
+
   const value = useMemo(
     () => ({
       user,
       isLoggedIn: Boolean(user),
       isReady,
       login,
-      signup,
+      requestSignup,
+      confirmSignup,
       logout,
+      refreshUser,
+      setUser,
     }),
-    [user, isReady, login, signup, logout],
+    [user, isReady, login, requestSignup, confirmSignup, logout, refreshUser],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

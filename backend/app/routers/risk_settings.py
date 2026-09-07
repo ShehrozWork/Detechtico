@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import get_current_user
+from app.deps import require_entitled
 from app.models import User
 from app.schemas import RiskSettingsOut, RiskSettingsUpdate
 from app.services.risk_settings import (
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/risk-settings", tags=["risk-settings"])
 @router.get("", response_model=RiskSettingsOut)
 @router.get("/", response_model=RiskSettingsOut, include_in_schema=False)
 def get_risk_settings(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_entitled),
     db: Session = Depends(get_db),
 ) -> RiskSettingsOut:
     row = get_or_create_risk_settings(db, user.id)
@@ -30,7 +30,7 @@ def get_risk_settings(
 @router.put("/", response_model=RiskSettingsOut, include_in_schema=False)
 def update_risk_settings(
     payload: RiskSettingsUpdate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_entitled),
     db: Session = Depends(get_db),
 ) -> RiskSettingsOut:
     row = upsert_risk_settings(

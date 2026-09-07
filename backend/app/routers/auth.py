@@ -12,14 +12,30 @@ from app.config import get_settings
 from app.db import get_db, set_rls_user
 from app.errors import INVALID_CREDENTIALS, RATE_LIMITED, UNAUTHORIZED, error
 from app.middleware import client_ip
-from app.models import PasswordResetToken, RefreshToken, User
+from app.models import (
+    EmailChangeChallenge,
+    EmailChangeRevertToken,
+    PasswordResetToken,
+    RefreshToken,
+    SignupChallenge,
+    User,
+)
 from app.rate_limit import limiter
 from app.schemas import (
+    ChangePasswordRequest,
+    ConfirmEmailChangeRequest,
+    ConfirmSignupRequest,
+    EmailChangeRequestedOut,
     ForgotPasswordRequest,
     LoginRequest,
+    RequestEmailChangeRequest,
     ResetPasswordRequest,
+    RevertEmailChangeRequest,
     SignupRequest,
+    SignupRequestedOut,
+    UpdateProfileRequest,
     UserOut,
+    VerifyPasswordRequest,
 )
 from app.security import (
     ACCESS_COOKIE,
@@ -30,12 +46,14 @@ from app.security import (
     dummy_password_verify,
     hash_password,
     hash_token,
+    new_otp_code,
     new_refresh_token,
     password_meets_policy,
     set_auth_cookies,
     verify_password,
 )
 from app.deps import get_current_user
+from app.services.mail import send_email_change_alert, send_email_change_otp, send_signup_otp
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -86,10 +104,12 @@ def _revoke_all_refresh_tokens(db: Session, user_id) -> None:
         token.revoked_at = now
 
 
-@router.post("/signup", response_model=UserOut, status_code=status.HTTP_201_CREATED)
-def signup(payload: SignupRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> User:
+@router.post("/signup", response_model=SignupRequestedOut)
+def signup(payload: SignupRequest, request: Request, db: Session = Depends(get_db)) -> SignupRequestedOut:
     ip = client_ip(request)
-    if not limiter.allow(f"signup:{ip}", 3, 60):
+    if not limiter.allow(f"signup:{ip}", 5, 60):
+        raise RATE_LIMITED
+    if not limiter.allow(f"signup-email:{payload.email}", 8, 600):
         raise RATE_LIMITED
     if not password_meets_policy(payload.password):
         raise error(
@@ -98,7 +118,105 @@ def signup(payload: SignupRequest, request: Request, response: Response, db: Ses
             "Password must be 12–128 characters and include at least one letter and one number.",
         )
 
-    user = User(email=payload.email, name=payload.name, password_hash=hash_password(payload.password))
+    existing = db.scalar(select(User).where(User.email == payload.email))
+    if existing is not None:
+        raise error(409, "email_taken", "An account with this email already exists.")
+
+    now = datetime.now(timezone.utc)
+    resend_cooldown = timedelta(seconds=60)
+    latest = db.scalar(
+        select(SignupChallenge)
+        .where(SignupChallenge.email == payload.email)
+        .order_by(SignupChallenge.created_at.desc())
+    )
+    if latest is not None and latest.created_at > now - resend_cooldown:
+        wait = int((latest.created_at + resend_cooldown - now).total_seconds()) + 1
+        raise error(
+            429,
+            "resend_cooldown",
+            f"Please wait {wait} second{'s' if wait != 1 else ''} before requesting another code.",
+        )
+
+    pending = db.scalars(
+        select(SignupChallenge).where(
+            SignupChallenge.email == payload.email,
+            SignupChallenge.consumed_at.is_(None),
+            SignupChallenge.expires_at > now,
+        )
+    ).all()
+    for challenge in pending:
+        challenge.consumed_at = now
+
+    otp = new_otp_code(6)
+    db.add(
+        SignupChallenge(
+            email=payload.email,
+            name=payload.name,
+            password_hash=hash_password(payload.password),
+            otp_hash=hash_token(otp),
+            expires_at=now + timedelta(minutes=10),
+        )
+    )
+    db.flush()
+    send_signup_otp(payload.email, otp)
+    return SignupRequestedOut(
+        message="We sent a verification code to your email address.",
+        email=payload.email,
+        expires_in_seconds=600,
+        resend_after_seconds=60,
+    )
+
+
+@router.post("/signup/confirm", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+def confirm_signup(
+    payload: ConfirmSignupRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> User:
+    ip = client_ip(request)
+    if not limiter.allow(f"signup-confirm:{ip}", 10, 60):
+        raise RATE_LIMITED
+    if not limiter.allow(f"signup-confirm-email:{payload.email}", 10, 600):
+        raise RATE_LIMITED
+
+    now = datetime.now(timezone.utc)
+    challenge = db.scalar(
+        select(SignupChallenge)
+        .where(
+            SignupChallenge.email == payload.email,
+            SignupChallenge.consumed_at.is_(None),
+        )
+        .order_by(SignupChallenge.created_at.desc())
+    )
+    if challenge is None or challenge.expires_at <= now:
+        raise error(400, "otp_expired", "This code has expired. Request a new one.")
+
+    if challenge.attempts >= 5:
+        challenge.consumed_at = now
+        raise error(400, "otp_locked", "Too many incorrect attempts. Request a new code.")
+
+    if hash_token(payload.otp) != challenge.otp_hash:
+        challenge.attempts += 1
+        db.flush()
+        remaining = max(0, 5 - challenge.attempts)
+        raise error(
+            400,
+            "otp_invalid",
+            f"Incorrect code. {remaining} attempt{'s' if remaining != 1 else ''} remaining.",
+        )
+
+    existing = db.scalar(select(User).where(User.email == challenge.email))
+    if existing is not None:
+        challenge.consumed_at = now
+        raise error(409, "email_taken", "An account with this email already exists.")
+
+    challenge.consumed_at = now
+    user = User(
+        email=challenge.email,
+        name=challenge.name,
+        password_hash=challenge.password_hash,
+    )
     db.add(user)
     try:
         db.flush()
@@ -189,6 +307,262 @@ def logout(request: Request, response: Response, db: Session = Depends(get_db)) 
 
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(get_current_user)) -> User:
+    return user
+
+
+@router.patch("/me", response_model=UserOut)
+def update_profile(
+    payload: UpdateProfileRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    ip = client_ip(request)
+    if not limiter.allow(f"profile:{user.id}:{ip}", 10, 60):
+        raise RATE_LIMITED
+
+    user.name = payload.name
+    db.flush()
+    return user
+
+
+@router.post("/verify-password", status_code=status.HTTP_204_NO_CONTENT)
+def verify_current_password(
+    payload: VerifyPasswordRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> Response:
+    ip = client_ip(request)
+    if not limiter.allow(f"verify-password:{user.id}:{ip}", 10, 60):
+        raise RATE_LIMITED
+    if not verify_password(payload.current_password, user.password_hash):
+        raise error(400, "invalid_password", "Current password is incorrect.")
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.post("/email-change/request", response_model=EmailChangeRequestedOut)
+def request_email_change(
+    payload: RequestEmailChangeRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> EmailChangeRequestedOut:
+    ip = client_ip(request)
+    if not limiter.allow(f"email-change-req:{user.id}:{ip}", 10, 600):
+        raise RATE_LIMITED
+    if not verify_password(payload.current_password, user.password_hash):
+        raise error(400, "invalid_password", "Current password is incorrect.")
+    if payload.new_email == user.email:
+        raise error(400, "same_email", "Enter a different email address.")
+
+    taken = db.scalar(select(User).where(User.email == payload.new_email))
+    if taken is not None:
+        raise error(409, "email_taken", "An account with this email already exists.")
+
+    now = datetime.now(timezone.utc)
+    resend_cooldown = timedelta(seconds=60)
+    latest = db.scalar(
+        select(EmailChangeChallenge)
+        .where(EmailChangeChallenge.user_id == user.id)
+        .order_by(EmailChangeChallenge.created_at.desc())
+    )
+    if latest is not None and latest.created_at > now - resend_cooldown:
+        wait = int((latest.created_at + resend_cooldown - now).total_seconds()) + 1
+        raise error(
+            429,
+            "resend_cooldown",
+            f"Please wait {wait} second{'s' if wait != 1 else ''} before requesting another code.",
+        )
+
+    pending = db.scalars(
+        select(EmailChangeChallenge).where(
+            EmailChangeChallenge.user_id == user.id,
+            EmailChangeChallenge.consumed_at.is_(None),
+            EmailChangeChallenge.expires_at > now,
+        )
+    ).all()
+    for challenge in pending:
+        challenge.consumed_at = now
+
+    otp = new_otp_code(6)
+    db.add(
+        EmailChangeChallenge(
+            user_id=user.id,
+            new_email=payload.new_email,
+            otp_hash=hash_token(otp),
+            expires_at=now + timedelta(minutes=10),
+        )
+    )
+    db.flush()
+    send_email_change_otp(payload.new_email, otp)
+    return EmailChangeRequestedOut(
+        message="We sent a verification code to your new email address.",
+        new_email=payload.new_email,
+        expires_in_seconds=600,
+        resend_after_seconds=60,
+    )
+
+
+@router.post("/email-change/confirm", response_model=UserOut)
+def confirm_email_change(
+    payload: ConfirmEmailChangeRequest,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    ip = client_ip(request)
+    if not limiter.allow(f"email-change-confirm:{user.id}:{ip}", 10, 600):
+        raise RATE_LIMITED
+
+    now = datetime.now(timezone.utc)
+    challenge = db.scalar(
+        select(EmailChangeChallenge)
+        .where(
+            EmailChangeChallenge.user_id == user.id,
+            EmailChangeChallenge.consumed_at.is_(None),
+        )
+        .order_by(EmailChangeChallenge.created_at.desc())
+    )
+    if challenge is None or challenge.expires_at <= now:
+        raise error(400, "otp_expired", "This code has expired. Request a new one.")
+
+    if challenge.attempts >= 5:
+        challenge.consumed_at = now
+        raise error(400, "otp_locked", "Too many incorrect attempts. Request a new code.")
+
+    if hash_token(payload.otp) != challenge.otp_hash:
+        challenge.attempts += 1
+        db.flush()
+        remaining = max(0, 5 - challenge.attempts)
+        raise error(
+            400,
+            "otp_invalid",
+            f"Incorrect code. {remaining} attempt{'s' if remaining != 1 else ''} remaining.",
+        )
+
+    taken = db.scalar(
+        select(User).where(User.email == challenge.new_email, User.id != user.id)
+    )
+    if taken is not None:
+        challenge.consumed_at = now
+        raise error(409, "email_taken", "An account with this email already exists.")
+
+    previous_email = user.email
+    new_email = challenge.new_email
+    challenge.consumed_at = now
+    user.email = new_email
+    db.flush()
+
+    revert_raw = new_refresh_token()
+    db.add(
+        EmailChangeRevertToken(
+            user_id=user.id,
+            previous_email=previous_email,
+            new_email=new_email,
+            token_hash=hash_token(revert_raw),
+            expires_at=now + timedelta(hours=72),
+        )
+    )
+    db.flush()
+
+    settings = get_settings()
+    origin = settings.cors_origin_list[0] if settings.cors_origin_list else "http://localhost:3000"
+    revert_url = f"{origin.rstrip('/')}/revert-email?token={revert_raw}"
+    try:
+        send_email_change_alert(
+            to_email=previous_email,
+            new_email=new_email,
+            revert_url=revert_url,
+        )
+    except Exception:
+        # Email already changed; alert failure should not undo ownership proof.
+        import logging
+
+        logging.getLogger("detechtico.auth").exception(
+            "Failed to send email-change alert to previous inbox for user %s",
+            user.id,
+        )
+
+    return user
+
+
+@router.post("/email-change/revert", response_model=UserOut)
+def revert_email_change(
+    payload: RevertEmailChangeRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> User:
+    ip = client_ip(request)
+    if not limiter.allow(f"email-change-revert:{ip}", 10, 600):
+        raise RATE_LIMITED
+
+    now = datetime.now(timezone.utc)
+    stored = db.scalar(
+        select(EmailChangeRevertToken).where(
+            EmailChangeRevertToken.token_hash == hash_token(payload.token)
+        )
+    )
+    if stored is None or stored.used_at is not None or stored.expires_at <= now:
+        raise error(400, "invalid_revert_token", "This revert link is invalid or has expired.")
+
+    user = db.get(User, stored.user_id)
+    if user is None or not user.is_active:
+        raise error(400, "invalid_revert_token", "This revert link is invalid or has expired.")
+
+    # Only revert if the account is still on the new email from this change.
+    if user.email != stored.new_email:
+        stored.used_at = now
+        raise error(
+            400,
+            "email_already_changed",
+            "This email change can no longer be reverted automatically.",
+        )
+
+    conflict = db.scalar(
+        select(User).where(User.email == stored.previous_email, User.id != user.id)
+    )
+    if conflict is not None:
+        raise error(
+            409,
+            "email_taken",
+            "The previous email is no longer available. Contact support.",
+        )
+
+    user.email = stored.previous_email
+    stored.used_at = now
+    set_rls_user(db, user.id)
+    _revoke_all_refresh_tokens(db, user.id)
+    db.flush()
+    return user
+
+
+@router.post("/change-password", response_model=UserOut)
+def change_password(
+    payload: ChangePasswordRequest,
+    request: Request,
+    response: Response,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    ip = client_ip(request)
+    if not limiter.allow(f"change-password:{user.id}:{ip}", 5, 60):
+        raise RATE_LIMITED
+    if not verify_password(payload.current_password, user.password_hash):
+        raise error(400, "invalid_password", "Current password is incorrect.")
+    if not password_meets_policy(payload.new_password):
+        raise error(
+            400,
+            "weak_password",
+            "Password must be 12–128 characters and include at least one letter and one number.",
+        )
+    if payload.current_password == payload.new_password:
+        raise error(400, "same_password", "Choose a new password different from your current one.")
+
+    user.password_hash = hash_password(payload.new_password)
+    _revoke_all_refresh_tokens(db, user.id)
+    db.flush()
+    # Keep this browser signed in; revoke other sessions only.
+    _issue_session(response, db, user, request, persistent=True)
     return user
 
 

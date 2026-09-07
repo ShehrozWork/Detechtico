@@ -44,6 +44,9 @@ class User(Base):
     risk_settings: Mapped[Optional["UserRiskSettings"]] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    subscription: Mapped[Optional["Subscription"]] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
 
     @property
     def trial_ends_at(self) -> datetime:
@@ -52,6 +55,32 @@ class User(Base):
     @property
     def trial_active(self) -> bool:
         return datetime.now(timezone.utc) < self.trial_ends_at
+
+    @property
+    def plan_id(self) -> str | None:
+        return self.subscription.plan_id if self.subscription else None
+
+    @property
+    def subscription_status(self) -> str:
+        return self.subscription.status if self.subscription else "none"
+
+    @property
+    def billing_period(self) -> str | None:
+        return self.subscription.billing_period if self.subscription else None
+
+    @property
+    def current_period_end(self) -> datetime | None:
+        return self.subscription.current_period_end if self.subscription else None
+
+    @property
+    def cancel_at_period_end(self) -> bool:
+        return bool(self.subscription.cancel_at_period_end) if self.subscription else False
+
+    @property
+    def entitled(self) -> bool:
+        from app.billing.entitlements import user_is_entitled
+
+        return user_is_entitled(self, self.subscription)
 
 
 class RefreshToken(Base):
@@ -199,4 +228,79 @@ class FindingDisposition(Base):
     )
     disposition: Mapped[str] = mapped_column(String(16))
     note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True)
+    stripe_subscription_id: Mapped[Optional[str]] = mapped_column(String(255), unique=True, nullable=True)
+    stripe_price_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    plan_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    billing_period: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="none", server_default="none")
+    current_period_end: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    cancel_at_period_end: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    last_event_created_at: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped[User] = relationship(back_populates="subscription")
+
+
+class StripeWebhookEvent(Base):
+    __tablename__ = "stripe_webhook_events"
+
+    event_id: Mapped[str] = mapped_column(String(255), primary_key=True)
+    type: Mapped[str] = mapped_column(String(120))
+    event_created: Mapped[int] = mapped_column(BigInteger)
+    processed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EmailChangeChallenge(Base):
+    __tablename__ = "email_change_challenges"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    new_email: Mapped[str] = mapped_column(String(254))
+    otp_hash: Mapped[str] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class EmailChangeRevertToken(Base):
+    __tablename__ = "email_change_revert_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    previous_email: Mapped[str] = mapped_column(String(254))
+    new_email: Mapped[str] = mapped_column(String(254))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class SignupChallenge(Base):
+    __tablename__ = "signup_challenges"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(254), index=True)
+    name: Mapped[str] = mapped_column(String(80))
+    password_hash: Mapped[str] = mapped_column(String(255))
+    otp_hash: Mapped[str] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -34,6 +34,9 @@ admin_engine = create_engine(
 )
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+AdminSessionLocal = sessionmaker(
+    bind=admin_engine, autoflush=False, autocommit=False, expire_on_commit=False
+)
 
 
 def set_rls_user(db: Session, user_id: UUID | None) -> None:

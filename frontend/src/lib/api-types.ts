@@ -5,6 +5,12 @@ export type User = {
   created_at: string;
   trial_ends_at: string;
   trial_active: boolean;
+  plan_id?: string | null;
+  subscription_status?: string;
+  billing_period?: string | null;
+  current_period_end?: string | null;
+  cancel_at_period_end?: boolean;
+  entitled?: boolean;
 };
 
 export type Finding = {

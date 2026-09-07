@@ -59,6 +59,11 @@ def new_refresh_token() -> str:
     return secrets.token_urlsafe(48)
 
 
+def new_otp_code(length: int = 6) -> str:
+    upper = 10**length
+    return f"{secrets.randbelow(upper):0{length}d}"
+
+
 def create_access_token(user_id: UUID, settings: Settings | None = None) -> str:
     cfg = settings or get_settings()
     now = datetime.now(timezone.utc)

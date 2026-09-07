@@ -7,7 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import get_current_user
+from app.deps import require_entitled
 from app.errors import FORBIDDEN, RATE_LIMITED, error
 from app.models import ImportedTransaction, User
 from app.rate_limit import limiter
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/transactions", tags=["transactions"])
 @router.post("/import", response_model=list[TransactionOut], status_code=status.HTTP_201_CREATED)
 def import_transactions(
     payload: TransactionImportRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_entitled),
     db: Session = Depends(get_db),
 ) -> list[ImportedTransaction]:
     if not limiter.allow(f"txn-import:{user.id}", 20, 60):
@@ -49,7 +49,7 @@ def import_transactions(
 @router.get("", response_model=list[TransactionOut])
 @router.get("/", response_model=list[TransactionOut], include_in_schema=False)
 def list_transactions(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_entitled),
     db: Session = Depends(get_db),
 ) -> list[ImportedTransaction]:
     return list(
@@ -66,7 +66,7 @@ def list_transactions(
 def update_transaction_status(
     transaction_id: UUID,
     payload: TransactionStatusUpdate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_entitled),
     db: Session = Depends(get_db),
 ) -> ImportedTransaction:
     txn = db.get(ImportedTransaction, transaction_id)
@@ -83,7 +83,7 @@ def update_transaction_status(
 @router.delete("/{transaction_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
 def delete_transaction(
     transaction_id: UUID,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_entitled),
     db: Session = Depends(get_db),
 ) -> Response:
     txn = db.get(ImportedTransaction, transaction_id)
@@ -99,7 +99,7 @@ def delete_transaction(
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
 @router.delete("/", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None, include_in_schema=False)
 def clear_transactions(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_entitled),
     db: Session = Depends(get_db),
 ) -> Response:
     db.execute(delete(ImportedTransaction).where(ImportedTransaction.user_id == user.id))

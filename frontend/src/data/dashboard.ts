@@ -44,6 +44,16 @@ export const dashboardNavItems: DashboardNavItem[] = [
     href: "/financial-statement-analysis",
     icon: "file",
   },
+  {
+    label: "Billing",
+    href: "/dashboard/billing",
+    icon: "banknote",
+  },
+  {
+    label: "Account",
+    href: "/dashboard/settings",
+    icon: "user",
+  },
 ];
 
 export const dashboardModules: DashboardModule[] = [

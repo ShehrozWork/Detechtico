@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AuthGate } from "@/components/auth/AuthGate";
+import { EntitlementGate } from "@/components/auth/EntitlementGate";
 import { DashboardShell } from "@/components/dashboard/DashboardShell";
 
 export const metadata: Metadata = {
@@ -18,7 +19,9 @@ export default function AppLayout({
 }>) {
   return (
     <AuthGate>
-      <DashboardShell>{children}</DashboardShell>
+      <DashboardShell>
+        <EntitlementGate>{children}</EntitlementGate>
+      </DashboardShell>
     </AuthGate>
   );
 }

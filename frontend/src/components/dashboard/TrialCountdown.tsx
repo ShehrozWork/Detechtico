@@ -31,6 +31,38 @@ export function TrialCountdown() {
 
   if (!user || remainingMs === null) return null;
 
+  if (user.entitled && !user.trial_active) {
+    const planLabel =
+      user.plan_id === "professional"
+        ? "Professional"
+        : user.plan_id === "essential"
+          ? "Essential"
+          : "Paid plan";
+    return (
+      <div className="rounded-[12px] border border-primary/20 bg-sunken p-3.5">
+        <div className="flex items-center gap-2">
+          <Icon name="check-circle" className="h-4 w-4 text-primary" strokeWidth={2} />
+          <p className="text-[12.5px] font-semibold text-ink">{planLabel}</p>
+        </div>
+        <p className="mt-1.5 text-[12px] font-light leading-[1.6] text-subtle">
+          {user.cancel_at_period_end
+            ? `Access until ${
+                user.current_period_end
+                  ? new Date(user.current_period_end).toLocaleDateString()
+                  : "period end"
+              }.`
+            : "Subscription active."}
+        </p>
+        <Link
+          href="/dashboard/billing"
+          className="mt-2.5 inline-flex w-full items-center justify-center rounded-[8px] bg-ink px-3 py-2 text-[12.5px] font-semibold text-white transition-colors hover:bg-ink/85"
+        >
+          Manage billing
+        </Link>
+      </div>
+    );
+  }
+
   const totalSeconds = Math.floor(remainingMs / 1000);
   const days = Math.floor(totalSeconds / 86400);
   const hours = Math.floor((totalSeconds % 86400) / 3600);

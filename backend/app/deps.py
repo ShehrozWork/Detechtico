@@ -7,9 +7,10 @@ import jwt
 from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
+from app.billing.entitlements import user_is_entitled
 from app.db import SessionLocal, get_db, set_rls_user
-from app.errors import UNAUTHORIZED
-from app.models import User
+from app.errors import UNAUTHORIZED, error
+from app.models import Subscription, User
 from app.security import ACCESS_COOKIE, decode_access_token
 
 
@@ -26,6 +27,17 @@ def get_current_user(request: Request, db: Session = Depends(get_db)) -> User:
     user = db.get(User, user_id)
     if user is None or not user.is_active:
         raise UNAUTHORIZED
+    return user
+
+
+def require_entitled(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> User:
+    sub = db.get(Subscription, user.id)
+    if not user_is_entitled(user, sub):
+        raise error(
+            403,
+            "subscription_required",
+            "Your trial has ended. Subscribe to Essential or Professional to continue.",
+        )
     return user
 
 

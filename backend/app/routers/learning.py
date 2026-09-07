@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.db import get_db
-from app.deps import get_current_user
+from app.deps import require_entitled
 from app.errors import FORBIDDEN, error
 from app.models import Finding, User
 from app.schemas import FindingDispositionOut, FindingDispositionRequest, LearningSummaryOut
@@ -18,7 +18,7 @@ router = APIRouter(tags=["learning"])
 
 @router.get("/learning/summary", response_model=LearningSummaryOut)
 def learning_summary(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_entitled),
     db: Session = Depends(get_db),
 ) -> LearningSummaryOut:
     return LearningSummaryOut(**build_learning_summary(db, user.id))
@@ -28,7 +28,7 @@ def learning_summary(
 def set_finding_disposition(
     finding_id: UUID,
     payload: FindingDispositionRequest,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_entitled),
     db: Session = Depends(get_db),
 ) -> FindingDispositionOut:
     finding = db.scalar(
