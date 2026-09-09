@@ -73,6 +73,7 @@ from app.schemas import (
 )
 from app.security import (
     STEP_UP_COOKIE,
+    clear_step_up_cookie,
     create_step_up_token,
     decode_step_up_token,
     hash_token,
@@ -272,6 +273,45 @@ def step_up(
         enrolled=True,
         staff_role=actor.staff_role or "",
         step_up_active=True,
+    )
+
+
+@router.post("/security/totp/disable", response_model=AdminSecurityStatusOut)
+def totp_disable(
+    payload: TotpConfirmRequest,
+    request: Request,
+    response: Response,
+    user: User = Depends(require_totp_enrolled),
+    db: Session = Depends(get_admin_db),
+) -> AdminSecurityStatusOut:
+    """Remove authenticator enrollment after verifying a current TOTP code."""
+    ip = client_ip(request)
+    if not limiter.allow(f"admin-totp-disable:{user.id}:{ip}", 5, 60):
+        raise RATE_LIMITED
+
+    actor = db.get(User, user.id)
+    if actor is None:
+        raise error(401, "unauthorized", "Please sign in again.")
+    row = db.get(StaffTotpSecret, actor.id)
+    if row is None or row.confirmed_at is None:
+        raise error(400, "totp_required", "Two-factor authentication is not enrolled.")
+    if not verify_totp(row.secret, payload.code):
+        raise error(400, "invalid_totp", "Invalid authenticator code.")
+
+    db.delete(row)
+    write_audit(
+        db,
+        actor=actor,
+        action="totp_unenrolled",
+        target_type="user",
+        target_id=actor.id,
+    )
+    clear_step_up_cookie(response)
+    db.flush()
+    return AdminSecurityStatusOut(
+        enrolled=False,
+        staff_role=actor.staff_role or "",
+        step_up_active=False,
     )
 
 

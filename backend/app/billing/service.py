@@ -275,7 +275,22 @@ def _sub_attr(stripe_subscription: Any, name: str, default: Any = None) -> Any:
 
 
 def _period_end(stripe_subscription: Any) -> datetime | None:
+    """Billing period end for our single-item subscriptions.
+
+    Stripe API ≥ 2025-03-31 (Basil) moved current_period_end from the
+    Subscription object onto each SubscriptionItem. Prefer the item field and
+    fall back to the legacy top-level attribute for older API versions.
+    """
     value = _sub_attr(stripe_subscription, "current_period_end")
+    if value is None:
+        items = _subscription_items(stripe_subscription)
+        if items:
+            item = items[0]
+            value = (
+                item.get("current_period_end")
+                if isinstance(item, dict)
+                else getattr(item, "current_period_end", None)
+            )
     if value is None:
         return None
     return datetime.fromtimestamp(int(value), tz=timezone.utc)
