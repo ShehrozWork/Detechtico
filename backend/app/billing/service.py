@@ -204,6 +204,38 @@ def cancel_subscription_at_period_end(db: Session, user: User) -> ApplyResult:
     return _sync_after_modify(db, user.id, stripe_sub, row.last_event_created_at)
 
 
+def cancel_subscription_immediately(db: Session, user: User) -> ApplyResult:
+    """Cancel the Stripe subscription now and sync local state."""
+    require_stripe_ready()
+    row = ensure_subscription_row_locked(db, user.id)
+    if not row.stripe_subscription_id:
+        raise error(
+            400,
+            "no_active_subscription",
+            "You do not have a Stripe subscription to cancel.",
+        )
+    stripe_sub = stripe.Subscription.cancel(row.stripe_subscription_id)
+    return _sync_after_modify(db, user.id, stripe_sub, row.last_event_created_at)
+
+
+def sync_subscription_from_stripe(db: Session, user: User) -> ApplyResult:
+    """Pull latest subscription state from Stripe for support reconciliation."""
+    require_stripe_ready()
+    row = ensure_subscription_row_locked(db, user.id)
+    if not row.stripe_subscription_id:
+        raise error(
+            400,
+            "no_stripe_subscription",
+            "No Stripe subscription is linked to this account.",
+        )
+    stripe_sub = retrieve_subscription(row.stripe_subscription_id)
+    event_created = max(int(time.time()), (row.last_event_created_at or 0) + 1)
+    try:
+        return apply_subscription_state(db, user.id, stripe_sub, event_created)
+    except SubscriptionItemsInvalid as exc:
+        raise error(409, "subscription_items_invalid", str(exc)) from exc
+
+
 def resume_subscription(db: Session, user: User) -> ApplyResult:
     """Undo a scheduled cancel-at-period-end."""
     require_stripe_ready()

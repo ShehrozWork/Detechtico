@@ -34,6 +34,10 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(80))
     password_hash: Mapped[str] = mapped_column(String(255))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    staff_role: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
+    trial_ends_at_override: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -47,9 +51,23 @@ class User(Base):
     subscription: Mapped[Optional["Subscription"]] = relationship(
         back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
+    staff_totp: Mapped[Optional["StaffTotpSecret"]] = relationship(
+        back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+    comp_entitlements: Mapped[list["CompEntitlement"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        foreign_keys="CompEntitlement.user_id",
+    )
+
+    @property
+    def is_staff(self) -> bool:
+        return self.staff_role in {"support", "billing_ops", "superadmin"}
 
     @property
     def trial_ends_at(self) -> datetime:
+        if self.trial_ends_at_override is not None:
+            return self.trial_ends_at_override
         return self.created_at + timedelta(days=TRIAL_DAYS)
 
     @property
@@ -81,6 +99,10 @@ class User(Base):
         from app.billing.entitlements import user_is_entitled
 
         return user_is_entitled(self, self.subscription)
+
+    @property
+    def totp_enrolled(self) -> bool:
+        return bool(self.staff_totp and self.staff_totp.confirmed_at is not None)
 
 
 class RefreshToken(Base):
@@ -149,6 +171,7 @@ class AnalysisJob(Base):
     error_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     model: Mapped[Optional[str]] = mapped_column(String(80), nullable=True)
     llm_status: Mapped[str] = mapped_column(String(16), default="pending")
+    retry_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -304,3 +327,95 @@ class SignupChallenge(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class StaffTotpSecret(Base):
+    __tablename__ = "staff_totp_secrets"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    secret: Mapped[str] = mapped_column(String(64))
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped[User] = relationship(back_populates="staff_totp")
+
+
+class CompEntitlement(Base):
+    __tablename__ = "comp_entitlements"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    reason: Mapped[str] = mapped_column(String(500))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    granted_by_user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    user: Mapped[User] = relationship(back_populates="comp_entitlements", foreign_keys=[user_id])
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_logs"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    actor_role: Mapped[str] = mapped_column(String(32))
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    target_type: Mapped[str] = mapped_column(String(64))
+    target_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, default=dict)
+    request_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+
+
+class DocumentRevealGrant(Base):
+    __tablename__ = "document_reveal_grants"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), index=True)
+    document_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class LlmUsageEvent(Base):
+    """One Anthropic Messages API call (or skipped attempt) for cost accounting."""
+
+    __tablename__ = "llm_usage_events"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    job_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("analysis_jobs.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    model: Mapped[str] = mapped_column(String(80), index=True)
+    status: Mapped[str] = mapped_column(String(16), index=True)
+    anthropic_request_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    cache_creation_input_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    cache_read_input_tokens: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    input_cost_usd: Mapped[float] = mapped_column(Numeric(14, 6), default=0)
+    output_cost_usd: Mapped[float] = mapped_column(Numeric(14, 6), default=0)
+    cache_write_cost_usd: Mapped[float] = mapped_column(Numeric(14, 6), default=0)
+    cache_read_cost_usd: Mapped[float] = mapped_column(Numeric(14, 6), default=0)
+    total_cost_usd: Mapped[float] = mapped_column(Numeric(14, 6), default=0, index=True)
+    pricing_known: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    pricing_version: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    pricing_source: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    rates_json: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    error_code: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )

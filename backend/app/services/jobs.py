@@ -7,16 +7,30 @@ from uuid import UUID
 from sqlalchemy import text
 
 from app.config import get_settings
-from app.db import SessionLocal, admin_engine, set_rls_user
+from app.db import SessionLocal, AdminSessionLocal, admin_engine, set_rls_user
 from app.models import AnalysisJob, Document, Finding
 from app.services.extract import extract_document
 from app.services.files import document_path
 from app.services.anthropic_analysis import analyze_with_anthropic
 from app.services.risk_settings import get_or_create_risk_settings, settings_to_dict
 from app.services.learning import format_learning_feedback_for_prompt
+from app.services.llm_usage import LlmCallResult, record_llm_usage
 from app.services.rules import run_rules
 
 logger = logging.getLogger(__name__)
+
+
+def _record_usage_admin(*, user_id: UUID, job_id: UUID, result: LlmCallResult) -> None:
+    """Persist usage with privileged DB session (table is FORCE RLS with no app policies)."""
+    db = AdminSessionLocal()
+    try:
+        record_llm_usage(db, user_id=user_id, job_id=job_id, result=result)
+        db.commit()
+    except Exception:
+        db.rollback()
+        logger.exception("Failed to record LLM usage event")
+    finally:
+        db.close()
 
 
 def _job_user_id(job_id: UUID) -> UUID | None:
@@ -91,17 +105,37 @@ def process_job(job_id: UUID) -> None:
         llm_status = "skipped"
         llm_findings: list[dict] = []
         try:
-            llm_findings, llm_status = analyze_with_anthropic(
+            llm_result = analyze_with_anthropic(
                 content,
                 rule_findings,
                 job.statement_type,
                 risk_settings,
                 learning_feedback,
             )
-            job.model = get_settings().anthropic_model if llm_status == "succeeded" else None
+            llm_findings = llm_result.findings
+            llm_status = llm_result.status
+            job.model = llm_result.model if llm_status == "succeeded" else None
+            _record_usage_admin(user_id=user_id, job_id=job.id, result=llm_result)
+            if llm_status == "failed" and get_settings().analysis_require_llm:
+                job.status = "failed"
+                job.error_code = "analysis_failed"
+                job.llm_status = llm_status
+                job.finished_at = datetime.now(timezone.utc)
+                db.commit()
+                return
         except Exception:
             logger.exception("Anthropic analysis failed for job %s", job.id)
             llm_status = "failed"
+            _record_usage_admin(
+                user_id=user_id,
+                job_id=job.id,
+                result=LlmCallResult(
+                    findings=[],
+                    status="failed",
+                    model=get_settings().anthropic_model,
+                    error_code="analysis_failed",
+                ),
+            )
             if get_settings().analysis_require_llm:
                 job.status = "failed"
                 job.error_code = "analysis_failed"

@@ -14,6 +14,7 @@ from app.db import grant_app_role
 from app.rls import apply_rls
 from app.db import admin_engine
 from app.routers.auth import router as auth_router
+from app.routers.admin import router as admin_router
 from app.routers.billing import router as billing_router
 from app.routers.documents import router as documents_router
 from app.routers.learning import router as learning_router
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     app.add_middleware(CORSMiddleware, **cors_kwargs)
 
     app.include_router(auth_router)
+    app.include_router(admin_router)
     app.include_router(billing_router)
     app.include_router(webhooks_router)
     app.include_router(documents_router)

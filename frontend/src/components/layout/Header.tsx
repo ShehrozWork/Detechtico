@@ -8,10 +8,11 @@ import { Icon } from "@/components/ui/Icon";
 import { navLinks } from "@/data/nav";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/utils/cn";
+import { isStaffUser, postAuthHomePath } from "@/lib/staff";
 
 export function Header() {
   const pathname = usePathname();
-  const { isLoggedIn, isReady } = useAuth();
+  const { user, isLoggedIn, isReady } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -34,8 +35,14 @@ export function Header() {
     };
   }, [menuOpen]);
 
-  const accountHref = isReady && isLoggedIn ? "/dashboard" : "/login";
-  const accountLabel = isReady && isLoggedIn ? "Dashboard" : "Log in";
+  const accountHref =
+    isReady && isLoggedIn ? postAuthHomePath(user) : "/login";
+  const accountLabel =
+    isReady && isLoggedIn
+      ? isStaffUser(user)
+        ? "Admin"
+        : "Dashboard"
+      : "Log in";
 
   return (
     <header className="relative z-50 bg-canvas py-3.5 sm:py-4.5">

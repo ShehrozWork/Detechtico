@@ -70,6 +70,37 @@ RLS_STATEMENTS = [
       USING (user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid)
       WITH CHECK (user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid);
     """,
+    """
+    ALTER TABLE staff_totp_secrets ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE staff_totp_secrets FORCE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS staff_totp_secrets_owner ON staff_totp_secrets;
+    CREATE POLICY staff_totp_secrets_owner ON staff_totp_secrets
+      USING (user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid)
+      WITH CHECK (user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid);
+    """,
+    """
+    ALTER TABLE comp_entitlements ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE comp_entitlements FORCE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS comp_entitlements_owner_read ON comp_entitlements;
+    CREATE POLICY comp_entitlements_owner_read ON comp_entitlements
+      FOR SELECT
+      USING (user_id = NULLIF(current_setting('app.current_user_id', true), '')::uuid);
+    """,
+    """
+    ALTER TABLE admin_audit_logs ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE admin_audit_logs FORCE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS admin_audit_logs_deny ON admin_audit_logs;
+    """,
+    """
+    ALTER TABLE document_reveal_grants ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE document_reveal_grants FORCE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS document_reveal_grants_deny ON document_reveal_grants;
+    """,
+    """
+    ALTER TABLE llm_usage_events ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE llm_usage_events FORCE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS llm_usage_events_deny ON llm_usage_events;
+    """,
 ]
 
 

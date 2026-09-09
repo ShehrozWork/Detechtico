@@ -6,25 +6,23 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { useAuth } from "@/context/AuthContext";
 import { getErrorMessage } from "@/lib/api-types";
+import { postAuthHomePath } from "@/lib/staff";
 
 const fieldClassName =
   "mt-2 w-full rounded-[10px] border border-line bg-canvas px-3.5 py-3 text-[14.5px] text-ink outline-none transition-colors focus:border-primary";
 
-function getSafeNext(next: string | null) {
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
-}
-
 export function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, isLoggedIn, isReady } = useAuth();
+  const { login, user, isLoggedIn, isReady } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const next = searchParams.get("next");
 
   useEffect(() => {
     if (!isReady || !isLoggedIn) return;
-    router.replace(getSafeNext(searchParams.get("next")));
-  }, [isLoggedIn, isReady, router, searchParams]);
+    router.replace(postAuthHomePath(user, next));
+  }, [isLoggedIn, isReady, router, next, user]);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -35,8 +33,8 @@ export function LoginContent() {
     setError(null);
     setPending(true);
     try {
-      await login(email, password, remember);
-      router.push(getSafeNext(searchParams.get("next")));
+      const current = await login(email, password, remember);
+      router.push(postAuthHomePath(current, next));
     } catch (caught) {
       setError(getErrorMessage(caught, "Invalid email or password."));
     } finally {

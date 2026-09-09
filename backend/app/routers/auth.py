@@ -65,14 +65,36 @@ def _issue_session(
     request: Request,
     persistent: bool = True,
 ) -> None:
+    settings = get_settings()
+    if (
+        user.staff_role is None
+        and user.email.lower() in settings.admin_bootstrap_email_set
+    ):
+        user.staff_role = "superadmin"
+        db.flush()
+
     set_rls_user(db, user.id)
     raw = new_refresh_token()
-    settings = get_settings()
-    lifetime = (
-        timedelta(days=settings.refresh_token_days)
-        if persistent
-        else timedelta(hours=12)
-    )
+    if user.is_staff:
+        lifetime = timedelta(days=settings.admin_refresh_token_days)
+        access_minutes = settings.admin_access_token_minutes
+        access_max_age = settings.admin_access_token_minutes * 60
+        refresh_max_age = settings.admin_refresh_token_days * 24 * 60 * 60
+        # Staff sessions are always short-lived; ignore long-lived "remember me".
+        persistent_cookie = True
+    else:
+        lifetime = (
+            timedelta(days=settings.refresh_token_days)
+            if persistent
+            else timedelta(hours=12)
+        )
+        access_minutes = settings.access_token_minutes
+        access_max_age = settings.access_token_minutes * 60 if persistent else None
+        refresh_max_age = (
+            settings.refresh_token_days * 24 * 60 * 60 if persistent else None
+        )
+        persistent_cookie = persistent
+
     db.add(
         RefreshToken(
             user_id=user.id,
@@ -83,7 +105,14 @@ def _issue_session(
         )
     )
     db.flush()
-    set_auth_cookies(response, create_access_token(user.id), raw, persistent=persistent)
+    set_auth_cookies(
+        response,
+        create_access_token(user.id, minutes=access_minutes),
+        raw,
+        persistent=persistent_cookie,
+        access_max_age=access_max_age,
+        refresh_max_age=refresh_max_age,
+    )
 
 
 def _unauthorized_cleared() -> JSONResponse:

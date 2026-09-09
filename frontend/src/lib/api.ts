@@ -1,13 +1,23 @@
 import type {
   AnalysisJob,
   AnalysisJobSummary,
+  AdminAuditItem,
+  AdminJobItem,
+  AdminOverview,
+  AdminSecurityStatus,
+  AdminSubscriptionItem,
+  AdminUserDetail,
+  AdminUserListItem,
   ApiError,
   FindingDisposition,
   LearningSummary,
   NetworkSummary,
   RiskSettings,
+  TotpSetup,
   Transaction,
   User,
+  WebhookHealth,
+  AiUsageSummary,
 } from "@/lib/api-types";
 
 /**
@@ -16,10 +26,18 @@ import type {
  *   fetches stay same-origin and Next rewrites proxy to the Paisol API.
  */
 function resolveApiUrl() {
-  const configured = process.env.NEXT_PUBLIC_API_URL;
-  if (configured !== undefined) return configured.replace(/\/$/, "");
-  if (process.env.NODE_ENV === "production") return "";
-  return "http://localhost:8000";
+  const configured = (process.env.NEXT_PUBLIC_API_URL ?? "").trim().replace(/\/$/, "");
+  const isProd = process.env.NODE_ENV === "production";
+
+  // Never call the developer's machine from a deployed build.
+  if (isProd) {
+    if (!configured || /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?$/i.test(configured)) {
+      return "";
+    }
+    return configured;
+  }
+
+  return configured || "http://localhost:8000";
 }
 
 const API_URL = resolveApiUrl();
@@ -392,6 +410,192 @@ export async function resumeSubscription() {
     method: "POST",
   });
   return parseBody<User>(response, "Unable to resume subscription.");
+}
+
+// --- Admin platform ops ---
+
+export async function getAdminSecurity() {
+  const response = await apiFetch("/admin/security");
+  return parseBody<AdminSecurityStatus>(response, "Unable to load admin security status.");
+}
+
+export async function setupAdminTotp() {
+  const response = await apiFetch("/admin/security/totp/setup", { method: "POST" });
+  return parseBody<TotpSetup>(response, "Unable to start TOTP setup.");
+}
+
+export async function confirmAdminTotp(code: string) {
+  const response = await apiFetch("/admin/security/totp/confirm", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+  return parseBody<AdminSecurityStatus>(response, "Unable to confirm TOTP.");
+}
+
+export async function adminStepUp(code: string) {
+  const response = await apiFetch("/admin/security/step-up", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+  return parseBody<AdminSecurityStatus>(response, "Unable to verify authenticator code.");
+}
+
+export async function getAdminOverview() {
+  const response = await apiFetch("/admin/overview");
+  return parseBody<AdminOverview>(response, "Unable to load admin overview.");
+}
+
+export async function getWebhookHealth() {
+  const response = await apiFetch("/admin/webhooks/health");
+  return parseBody<WebhookHealth>(response, "Unable to load webhook health.");
+}
+
+export async function listAdminUsers(params?: { q?: string; is_active?: boolean }) {
+  const search = new URLSearchParams();
+  if (params?.q) search.set("q", params.q);
+  if (params?.is_active !== undefined) search.set("is_active", String(params.is_active));
+  const qs = search.toString();
+  const response = await apiFetch(`/admin/users${qs ? `?${qs}` : ""}`);
+  return parseBody<{ items: AdminUserListItem[]; total: number }>(
+    response,
+    "Unable to load users.",
+  );
+}
+
+export async function getAdminUser(userId: string) {
+  const response = await apiFetch(`/admin/users/${userId}`);
+  return parseBody<AdminUserDetail>(response, "Unable to load user.");
+}
+
+export async function deactivateAdminUser(
+  userId: string,
+  body: { billing_action: "leave" | "cancel_at_period_end" | "cancel_immediately"; reason: string },
+) {
+  const response = await apiFetch(`/admin/users/${userId}/deactivate`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return parseBody<AdminUserDetail>(response, "Unable to deactivate user.");
+}
+
+export async function activateAdminUser(userId: string) {
+  const response = await apiFetch(`/admin/users/${userId}/activate`, { method: "POST" });
+  return parseBody<AdminUserDetail>(response, "Unable to activate user.");
+}
+
+export async function forceLogoutAdminUser(userId: string) {
+  const response = await apiFetch(`/admin/users/${userId}/force-logout`, { method: "POST" });
+  return parseBody<void>(response, "Unable to force logout.");
+}
+
+export async function triggerAdminPasswordReset(userId: string) {
+  const response = await apiFetch(`/admin/users/${userId}/password-reset`, { method: "POST" });
+  return parseBody<void>(response, "Unable to trigger password reset.");
+}
+
+export async function setAdminTrial(
+  userId: string,
+  body: { trial_ends_at: string; reason: string },
+) {
+  const response = await apiFetch(`/admin/users/${userId}/trial`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return parseBody<AdminUserDetail>(response, "Unable to update trial.");
+}
+
+export async function grantAdminComp(
+  userId: string,
+  body: { reason: string; expires_at: string },
+) {
+  const response = await apiFetch(`/admin/users/${userId}/comp`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return parseBody<AdminUserDetail>(response, "Unable to grant complimentary access.");
+}
+
+export async function revokeAdminComp(userId: string, reason: string) {
+  const response = await apiFetch(`/admin/users/${userId}/comp/revoke`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+  return parseBody<AdminUserDetail>(response, "Unable to revoke complimentary access.");
+}
+
+export async function setAdminStaffRole(
+  userId: string,
+  staff_role: "support" | "billing_ops" | "superadmin" | null,
+) {
+  const response = await apiFetch(`/admin/users/${userId}/staff-role`, {
+    method: "POST",
+    body: JSON.stringify({ staff_role }),
+  });
+  return parseBody<AdminUserDetail>(response, "Unable to update staff role.");
+}
+
+export async function syncAdminSubscription(userId: string) {
+  const response = await apiFetch(`/admin/users/${userId}/sync-subscription`, {
+    method: "POST",
+  });
+  return parseBody<AdminUserDetail>(response, "Unable to sync subscription.");
+}
+
+export async function listAdminSubscriptions(status?: string) {
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  const response = await apiFetch(`/admin/subscriptions${qs}`);
+  return parseBody<{ items: AdminSubscriptionItem[]; total: number }>(
+    response,
+    "Unable to load subscriptions.",
+  );
+}
+
+export async function listAdminJobs(params?: { status?: string; stuck?: boolean }) {
+  const search = new URLSearchParams();
+  if (params?.status) search.set("status", params.status);
+  if (params?.stuck) search.set("stuck", "true");
+  const qs = search.toString();
+  const response = await apiFetch(`/admin/jobs${qs ? `?${qs}` : ""}`);
+  return parseBody<{ items: AdminJobItem[]; total: number }>(response, "Unable to load jobs.");
+}
+
+export async function requeueAdminJob(jobId: string) {
+  const response = await apiFetch(`/admin/jobs/${jobId}/requeue`, { method: "POST" });
+  return parseBody<AdminJobItem>(response, "Unable to requeue job.");
+}
+
+export async function abandonAdminJob(jobId: string) {
+  const response = await apiFetch(`/admin/jobs/${jobId}/abandon`, { method: "POST" });
+  return parseBody<AdminJobItem>(response, "Unable to abandon job.");
+}
+
+export async function revealAdminDocument(documentId: string) {
+  const response = await apiFetch(`/admin/documents/${documentId}/reveal`, { method: "POST" });
+  return parseBody<{
+    document_id: string;
+    original_filename: string;
+    mime: string;
+    size_bytes: number;
+    checksum_sha256: string;
+    expires_at: string;
+  }>(response, "Unable to reveal document.");
+}
+
+export async function listAdminAudit(params?: { action?: string; target_id?: string }) {
+  const search = new URLSearchParams();
+  if (params?.action) search.set("action", params.action);
+  if (params?.target_id) search.set("target_id", params.target_id);
+  const qs = search.toString();
+  const response = await apiFetch(`/admin/audit${qs ? `?${qs}` : ""}`);
+  return parseBody<{ items: AdminAuditItem[]; total: number }>(
+    response,
+    "Unable to load audit log.",
+  );
+}
+
+export async function getAdminAiUsage(days = 30) {
+  const response = await apiFetch(`/admin/ai-usage?days=${days}`);
+  return parseBody<AiUsageSummary>(response, "Unable to load AI usage.");
 }
 
 export { RequestError };

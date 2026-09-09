@@ -6,6 +6,7 @@ from typing import Any
 
 from app.config import get_settings
 from app.services.extract import ExtractedContent
+from app.services.llm_usage import LlmCallResult
 
 FINDINGS_SCHEMA = {
     "type": "object",
@@ -50,18 +51,40 @@ def _clip(value: str, limit: int = 24_000) -> str:
     return value[:limit] + "\n[truncated for model context]"
 
 
+def _usage_ints(usage: Any) -> tuple[int, int, int, int]:
+    if usage is None:
+        return 0, 0, 0, 0
+
+    def _get(name: str) -> int:
+        value = getattr(usage, name, None)
+        if value is None and isinstance(usage, dict):
+            value = usage.get(name)
+        try:
+            return max(0, int(value or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    return (
+        _get("input_tokens"),
+        _get("output_tokens"),
+        _get("cache_creation_input_tokens"),
+        _get("cache_read_input_tokens"),
+    )
+
+
 def analyze_with_anthropic(
     content: ExtractedContent,
     rule_findings: list[dict[str, Any]],
     statement_type: str | None,
     risk_settings: dict[str, Any] | None = None,
     learning_feedback: str | None = None,
-) -> tuple[list[dict[str, Any]], str]:
+) -> LlmCallResult:
     settings = get_settings()
+    model = settings.anthropic_model
     if not settings.anthropic_api_key:
         if settings.analysis_require_llm or settings.is_production:
             raise RuntimeError("anthropic_unavailable")
-        return [], "skipped"
+        return LlmCallResult(findings=[], status="skipped", model=model)
 
     from anthropic import Anthropic
 
@@ -97,21 +120,32 @@ def analyze_with_anthropic(
             }
         )
 
-    response = client.messages.create(
-        model=settings.anthropic_model,
-        max_tokens=2000,
-        temperature=0,
-        system=SYSTEM_PROMPT,
-        tools=[
-            {
-                "name": "fraud_findings",
-                "description": "Return forensic findings supported by the extract.",
-                "input_schema": FINDINGS_SCHEMA,
-            }
-        ],
-        tool_choice={"type": "tool", "name": "fraud_findings"},
-        messages=[{"role": "user", "content": message_content}],
-    )
+    try:
+        response = client.messages.create(
+            model=model,
+            max_tokens=2000,
+            temperature=0,
+            system=SYSTEM_PROMPT,
+            tools=[
+                {
+                    "name": "fraud_findings",
+                    "description": "Return forensic findings supported by the extract.",
+                    "input_schema": FINDINGS_SCHEMA,
+                }
+            ],
+            tool_choice={"type": "tool", "name": "fraud_findings"},
+            messages=[{"role": "user", "content": message_content}],
+        )
+    except Exception as exc:
+        return LlmCallResult(
+            findings=[],
+            status="failed",
+            model=model,
+            error_code=type(exc).__name__[:64],
+        )
+
+    input_tokens, output_tokens, cache_write, cache_read = _usage_ints(getattr(response, "usage", None))
+    request_id = getattr(response, "id", None)
 
     parsed: dict[str, Any] = {"findings": []}
     for block in response.content:
@@ -142,4 +176,13 @@ def analyze_with_anthropic(
                 "confidence": confidence_value,
             }
         )
-    return findings[:15], "succeeded"
+    return LlmCallResult(
+        findings=findings[:15],
+        status="succeeded",
+        model=model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_creation_input_tokens=cache_write,
+        cache_read_input_tokens=cache_read,
+        request_id=str(request_id) if request_id else None,
+    )

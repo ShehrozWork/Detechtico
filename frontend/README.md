@@ -81,7 +81,11 @@ Open http://localhost:3000, create an account, then use Statement Analysis.
 
 Password reset links are written to the API log in development only.
 
-Vercel `API_PROXY_TARGET` rewrites include `/billing/*` only — **do not** proxy `/webhooks/stripe` through Next.js.
+Vercel `API_PROXY_TARGET` rewrites include `/billing/*` and `/admin/*` — **do not** proxy `/webhooks/stripe` through Next.js.
+
+## Production deploy
+
+See [DEPLOY.md](../DEPLOY.md) for Paisol Compose + Vercel steps, required secrets (`ADMIN_BOOTSTRAP_EMAILS`, Anthropic, Stripe, SMTP), and staff bootstrap.
 
 ## Security notes
 
@@ -89,3 +93,4 @@ Vercel `API_PROXY_TARGET` rewrites include `/billing/*` only — **do not** prox
 - In production set `ENVIRONMENT=production`, `COOKIE_SECURE=true`, a unique `JWT_SECRET`, and `TRUST_PROXY=true` only behind a known reverse proxy.
 - Production uses a non-superuser database role (`detechtico_app`) with row-level security on documents, jobs, findings, and subscriptions.
 - Stripe secrets stay server-side only. Checkout uses server-mapped Price IDs (never client-supplied).
+- Staff admin requires TOTP enrollment and shorter session TTLs; set `ADMIN_BOOTSTRAP_EMAILS` only for the first superadmin promotion.

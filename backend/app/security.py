@@ -16,6 +16,7 @@ from app.config import Settings, get_settings
 
 ACCESS_COOKIE = "dt_access"
 REFRESH_COOKIE = "dt_refresh"
+STEP_UP_COOKIE = "dt_admin_stepup"
 REFRESH_COOKIE_PATH = "/auth"
 
 _password_hasher = PasswordHasher(
@@ -64,9 +65,15 @@ def new_otp_code(length: int = 6) -> str:
     return f"{secrets.randbelow(upper):0{length}d}"
 
 
-def create_access_token(user_id: UUID, settings: Settings | None = None) -> str:
+def create_access_token(
+    user_id: UUID,
+    settings: Settings | None = None,
+    *,
+    minutes: int | None = None,
+) -> str:
     cfg = settings or get_settings()
     now = datetime.now(timezone.utc)
+    lifetime = minutes if minutes is not None else cfg.access_token_minutes
     payload: dict[str, Any] = {
         "sub": str(user_id),
         "typ": "access",
@@ -74,7 +81,7 @@ def create_access_token(user_id: UUID, settings: Settings | None = None) -> str:
         "aud": cfg.jwt_audience,
         "iat": int(now.timestamp()),
         "nbf": int(now.timestamp()),
-        "exp": int((now + timedelta(minutes=cfg.access_token_minutes)).timestamp()),
+        "exp": int((now + timedelta(minutes=lifetime)).timestamp()),
         "jti": str(uuid4()),
     }
     return jwt.encode(payload, cfg.jwt_secret, algorithm="HS256")
@@ -95,6 +102,37 @@ def decode_access_token(token: str, settings: Settings | None = None) -> UUID:
     return UUID(payload["sub"])
 
 
+def create_step_up_token(user_id: UUID, settings: Settings | None = None) -> str:
+    cfg = settings or get_settings()
+    now = datetime.now(timezone.utc)
+    payload: dict[str, Any] = {
+        "sub": str(user_id),
+        "typ": "admin_stepup",
+        "iss": cfg.jwt_issuer,
+        "aud": cfg.jwt_audience,
+        "iat": int(now.timestamp()),
+        "nbf": int(now.timestamp()),
+        "exp": int((now + timedelta(minutes=cfg.admin_step_up_minutes)).timestamp()),
+        "jti": str(uuid4()),
+    }
+    return jwt.encode(payload, cfg.jwt_secret, algorithm="HS256")
+
+
+def decode_step_up_token(token: str, settings: Settings | None = None) -> UUID:
+    cfg = settings or get_settings()
+    payload = jwt.decode(
+        token,
+        cfg.jwt_secret,
+        algorithms=["HS256"],
+        audience=cfg.jwt_audience,
+        issuer=cfg.jwt_issuer,
+        options={"require": ["exp", "iat", "nbf", "sub", "typ", "iss", "aud", "jti"]},
+    )
+    if payload.get("typ") != "admin_stepup":
+        raise jwt.InvalidTokenError("wrong token type")
+    return UUID(payload["sub"])
+
+
 def _cookie_common(cfg: Settings) -> dict[str, Any]:
     return {
         "httponly": True,
@@ -108,11 +146,16 @@ def set_auth_cookies(
     access_token: str,
     refresh_token: str,
     persistent: bool = True,
+    *,
+    access_max_age: int | None = None,
+    refresh_max_age: int | None = None,
 ) -> None:
     cfg = get_settings()
     common = _cookie_common(cfg)
-    access_max_age = cfg.access_token_minutes * 60 if persistent else None
-    refresh_max_age = cfg.refresh_token_days * 24 * 60 * 60 if persistent else None
+    if access_max_age is None:
+        access_max_age = cfg.access_token_minutes * 60 if persistent else None
+    if refresh_max_age is None:
+        refresh_max_age = cfg.refresh_token_days * 24 * 60 * 60 if persistent else None
     response.set_cookie(
         ACCESS_COOKIE,
         access_token,
@@ -129,6 +172,28 @@ def set_auth_cookies(
     )
 
 
+def set_step_up_cookie(response: Response, token: str) -> None:
+    cfg = get_settings()
+    response.set_cookie(
+        STEP_UP_COOKIE,
+        token,
+        **_cookie_common(cfg),
+        max_age=cfg.admin_step_up_minutes * 60,
+        path="/",
+    )
+
+
+def clear_step_up_cookie(response: Response) -> None:
+    cfg = get_settings()
+    response.delete_cookie(
+        STEP_UP_COOKIE,
+        path="/",
+        httponly=True,
+        secure=cfg.cookie_secure,
+        samesite=cfg.cookie_samesite,
+    )
+
+
 def clear_auth_cookies(response: Response) -> None:
     cfg = get_settings()
     common = {
@@ -138,3 +203,4 @@ def clear_auth_cookies(response: Response) -> None:
     }
     response.delete_cookie(ACCESS_COOKIE, path="/", **common)
     response.delete_cookie(REFRESH_COOKIE, path=REFRESH_COOKIE_PATH, **common)
+    clear_step_up_cookie(response)

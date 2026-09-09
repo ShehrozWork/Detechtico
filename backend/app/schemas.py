@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, mo
 
 StatementType = Literal["balance-sheet", "income", "cash-flow"]
 Severity = Literal["high", "medium", "low"]
-JobStatus = Literal["queued", "running", "succeeded", "failed"]
+JobStatus = Literal["queued", "running", "succeeded", "failed", "abandoned"]
 LlmStatus = Literal["pending", "succeeded", "skipped", "failed"]
 FindingSource = Literal["rule", "gpt", "llm"]
 TransactionStatus = Literal["flagged", "review", "clear"]
@@ -160,6 +160,9 @@ class UserOut(BaseModel):
     current_period_end: Optional[datetime] = None
     cancel_at_period_end: bool = False
     entitled: bool = False
+    staff_role: Optional[str] = None
+    totp_enrolled: bool = False
+    is_staff: bool = False
 
 
 class CheckoutSessionRequest(BaseModel):
@@ -388,3 +391,219 @@ class NetworkSummaryOut(BaseModel):
     connections: list[NetworkConnectionOut]
     clusters: list[NetworkClusterOut]
     transaction_count: int
+
+
+# --- Admin platform ops ---
+
+
+class TotpSetupOut(BaseModel):
+    secret: str
+    otpauth_url: str
+    enrolled: bool
+
+
+class TotpConfirmRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=8)
+
+
+class TotpStepUpRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=8)
+
+
+class AdminSecurityStatusOut(BaseModel):
+    enrolled: bool
+    staff_role: str
+    step_up_active: bool
+
+
+class AdminOverviewOut(BaseModel):
+    total_users: int
+    active_users: int
+    entitled_users: int
+    signups_7d: int
+    signups_30d: int
+    subscription_mix: dict[str, int]
+    stuck_jobs: int
+    failed_jobs_24h: int
+    webhook_failures_24h: int
+    last_webhook_at: Optional[datetime] = None
+    past_due_count: int
+
+
+class AdminUserListItem(BaseModel):
+    id: UUID
+    email: str
+    name: str
+    is_active: bool
+    staff_role: Optional[str] = None
+    created_at: datetime
+    trial_ends_at: datetime
+    trial_active: bool
+    entitled: bool
+    subscription_status: str
+    plan_id: Optional[str] = None
+    comp_active: bool = False
+
+
+class AdminUserListOut(BaseModel):
+    items: list[AdminUserListItem]
+    total: int
+
+
+class AdminCompOut(BaseModel):
+    id: UUID
+    reason: str
+    expires_at: datetime
+    created_at: datetime
+
+
+class AdminUserDetailOut(AdminUserListItem):
+    current_period_end: Optional[datetime] = None
+    cancel_at_period_end: bool = False
+    stripe_customer_id: Optional[str] = None
+    stripe_subscription_id: Optional[str] = None
+    active_comp: Optional[AdminCompOut] = None
+    recent_jobs: list[dict] = Field(default_factory=list)
+
+
+class DeactivateUserRequest(BaseModel):
+    billing_action: Literal["leave", "cancel_at_period_end", "cancel_immediately"]
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class TrialOverrideRequest(BaseModel):
+    trial_ends_at: datetime
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class CompGrantRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+    expires_at: datetime
+
+
+class CompRevokeRequest(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+
+
+class StaffRoleRequest(BaseModel):
+    staff_role: Optional[Literal["support", "billing_ops", "superadmin"]] = None
+
+
+class AdminSubscriptionItem(BaseModel):
+    user_id: UUID
+    email: str
+    plan_id: Optional[str] = None
+    status: str
+    billing_period: Optional[str] = None
+    current_period_end: Optional[datetime] = None
+    cancel_at_period_end: bool
+    stripe_customer_id: Optional[str] = None
+    stripe_subscription_id: Optional[str] = None
+
+
+class AdminSubscriptionListOut(BaseModel):
+    items: list[AdminSubscriptionItem]
+    total: int
+
+
+class AdminJobItem(BaseModel):
+    id: UUID
+    user_id: UUID
+    user_email: Optional[str] = None
+    document_id: UUID
+    original_filename: Optional[str] = None
+    status: str
+    error_code: Optional[str] = None
+    llm_status: str
+    retry_count: int
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+
+
+class AdminJobListOut(BaseModel):
+    items: list[AdminJobItem]
+    total: int
+
+
+class AdminAuditItem(BaseModel):
+    id: UUID
+    actor_user_id: UUID
+    actor_role: str
+    action: str
+    target_type: str
+    target_id: Optional[str] = None
+    metadata: dict = Field(default_factory=dict)
+    created_at: datetime
+
+
+class AdminAuditListOut(BaseModel):
+    items: list[AdminAuditItem]
+    total: int
+
+
+class WebhookHealthOut(BaseModel):
+    last_processed_at: Optional[datetime] = None
+    processed_24h: int
+    note: str = "Idempotent processed events only; failed deliveries are not stored locally."
+
+
+class AiUsageEventOut(BaseModel):
+    id: UUID
+    user_id: UUID
+    user_email: Optional[str] = None
+    job_id: Optional[UUID] = None
+    model: str
+    status: str
+    anthropic_request_id: Optional[str] = None
+    input_tokens: int
+    output_tokens: int
+    cache_creation_input_tokens: int
+    cache_read_input_tokens: int
+    input_cost_usd: float
+    output_cost_usd: float
+    cache_write_cost_usd: float
+    cache_read_cost_usd: float
+    total_cost_usd: float
+    pricing_known: bool
+    pricing_version: Optional[str] = None
+    pricing_source: Optional[str] = None
+    rates_json: Optional[dict] = None
+    error_code: Optional[str] = None
+    created_at: datetime
+
+
+class AiUsageModelBreakdown(BaseModel):
+    model: str
+    calls: int
+    input_tokens: int
+    output_tokens: int
+    total_cost_usd: float
+
+
+class AiUsageDailyPoint(BaseModel):
+    day: str
+    calls: int
+    total_cost_usd: float
+    input_tokens: int
+    output_tokens: int
+
+
+class AiUsageSummaryOut(BaseModel):
+    window_days: int
+    total_calls: int
+    succeeded_calls: int
+    failed_calls: int
+    skipped_calls: int
+    total_input_tokens: int
+    total_output_tokens: int
+    total_cache_creation_tokens: int
+    total_cache_read_tokens: int
+    total_cost_usd: float
+    avg_cost_per_succeeded_call_usd: float
+    pricing_source: str
+    pricing_version: str
+    configured_model: str
+    by_model: list[AiUsageModelBreakdown]
+    daily: list[AiUsageDailyPoint]
+    recent: list[AiUsageEventOut]

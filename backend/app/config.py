@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     jwt_audience: str = "detechtico-web"
     access_token_minutes: int = Field(default=10, ge=1, le=60)
     refresh_token_days: int = Field(default=7, ge=1, le=30)
+    admin_access_token_minutes: int = Field(default=5, ge=1, le=30)
+    admin_refresh_token_days: int = Field(default=1, ge=1, le=7)
+    admin_step_up_minutes: int = Field(default=10, ge=1, le=30)
+    admin_max_requeue: int = Field(default=3, ge=1, le=20)
+    admin_reveal_minutes: int = Field(default=15, ge=1, le=120)
+    admin_bootstrap_emails: str = ""
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
     cookie_secure: bool = False
     cookie_samesite: Literal["lax", "strict", "none"] = "lax"
@@ -96,6 +102,14 @@ class Settings(BaseSettings):
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
+
+    @property
+    def admin_bootstrap_email_set(self) -> set[str]:
+        return {
+            email.strip().lower()
+            for email in self.admin_bootstrap_emails.split(",")
+            if email.strip()
+        }
 
     @property
     def is_production(self) -> bool:

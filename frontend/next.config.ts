@@ -31,6 +31,7 @@ const nextConfig: NextConfig = {
       { source: "/risk-settings/:path*", destination: `${API_PROXY_TARGET}/risk-settings/:path*` },
       { source: "/findings/:path*", destination: `${API_PROXY_TARGET}/findings/:path*` },
       { source: "/billing/:path*", destination: `${API_PROXY_TARGET}/billing/:path*` },
+      { source: "/admin/:path*", destination: `${API_PROXY_TARGET}/admin/:path*` },
     ];
   },
 };

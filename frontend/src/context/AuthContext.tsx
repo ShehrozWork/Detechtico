@@ -22,7 +22,7 @@ type AuthContextValue = {
   user: User | null;
   isLoggedIn: boolean;
   isReady: boolean;
-  login: (email: string, password: string, remember: boolean) => Promise<void>;
+  login: (email: string, password: string, remember: boolean) => Promise<User>;
   requestSignup: (input: {
     name: string;
     email: string;
@@ -68,6 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (email: string, password: string, remember: boolean) => {
     const current = await loginRequest(email, password, remember);
     setUser(current);
+    return current;
   }, []);
 
   const requestSignup = useCallback(
