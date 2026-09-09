@@ -438,6 +438,14 @@ export async function confirmAdminTotp(code: string) {
   return parseBody<AdminSecurityStatus>(response, "Unable to confirm TOTP.");
 }
 
+export async function disableAdminTotp(code: string) {
+  const response = await apiFetch("/admin/security/totp/disable", {
+    method: "POST",
+    body: JSON.stringify({ code }),
+  });
+  return parseBody<AdminSecurityStatus>(response, "Unable to remove two-factor authentication.");
+}
+
 export async function adminStepUp(code: string) {
   const response = await apiFetch("/admin/security/step-up", {
     method: "POST",
