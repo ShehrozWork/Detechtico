@@ -21,8 +21,8 @@ export function AdminUsersContent() {
     setError(null);
     try {
       const data = await listAdminUsers({ q: query || undefined });
-      setItems(data.items);
-      setTotal(data.total);
+      setItems(data.items ?? []);
+      setTotal(data.total ?? 0);
     } catch (caught) {
       setError(getErrorMessage(caught, "Unable to load users."));
     } finally {

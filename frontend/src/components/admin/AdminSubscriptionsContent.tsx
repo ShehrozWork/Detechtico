@@ -17,8 +17,8 @@ export function AdminSubscriptionsContent() {
   const load = async (nextStatus = status) => {
     try {
       const data = await listAdminSubscriptions(nextStatus || undefined);
-      setItems(data.items);
-      setTotal(data.total);
+      setItems(data.items ?? []);
+      setTotal(data.total ?? 0);
     } catch (caught) {
       setError(getErrorMessage(caught, "Unable to load subscriptions."));
     }

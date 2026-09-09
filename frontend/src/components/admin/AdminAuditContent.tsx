@@ -17,8 +17,8 @@ export function AdminAuditContent() {
   const load = async () => {
     try {
       const data = await listAdminAudit({ action: action || undefined });
-      setItems(data.items);
-      setTotal(data.total);
+      setItems(data.items ?? []);
+      setTotal(data.total ?? 0);
     } catch (caught) {
       setError(getErrorMessage(caught, "Unable to load audit log."));
     }

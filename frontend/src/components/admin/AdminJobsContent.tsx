@@ -35,8 +35,8 @@ export function AdminJobsContent() {
         status: status || undefined,
         stuck: stuck || undefined,
       });
-      setItems(data.items);
-      setTotal(data.total);
+      setItems(data.items ?? []);
+      setTotal(data.total ?? 0);
     } catch (caught) {
       setError(getErrorMessage(caught, "Unable to load jobs."));
     }

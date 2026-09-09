@@ -57,7 +57,7 @@ Vercel env:
 | `API_PROXY_TARGET` | `http://<SERVER_PUBLIC_IP>:8211` (or HTTPS origin if you terminate TLS in front of the API) |
 | `NEXT_PUBLIC_API_URL` | **unset / empty** |
 
-Redeploy after pulling the `/admin/:path*` rewrite in `frontend/next.config.ts`.
+Redeploy after pulling admin proxy fixes in `frontend/next.config.ts` (JSON `beforeFiles` rewrite so `/admin` UI pages do not swallow API calls).
 
 Stripe webhooks must **not** go through Vercel. Point Stripe at:
 

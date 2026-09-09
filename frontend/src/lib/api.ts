@@ -149,6 +149,12 @@ async function parseBody<T>(response: Response, fallback: string): Promise<T> {
   if (!response.ok) {
     throw new RequestError(readApiError(data, fallback));
   }
+  if (data === null || data === undefined) {
+    throw new RequestError({
+      code: "invalid_response",
+      message: fallback,
+    });
+  }
   return data as T;
 }
 
