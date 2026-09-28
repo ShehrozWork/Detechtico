@@ -28,12 +28,7 @@ type AuthContextValue = {
     email: string;
     password: string;
     acceptedTerms: boolean;
-  }) => Promise<{
-    message: string;
-    email: string;
-    expires_in_seconds: number;
-    resend_after_seconds: number;
-  }>;
+  }) => Promise<User>;
   confirmSignup: (email: string, otp: string) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<User | null>;
@@ -78,12 +73,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       password: string;
       acceptedTerms: boolean;
     }) => {
-      return requestSignupApi({
+      const current = await requestSignupApi({
         name: input.name,
         email: input.email,
         password: input.password,
         accepted_terms: input.acceptedTerms,
       });
+      setUser(current);
+      return current;
     },
     [],
   );

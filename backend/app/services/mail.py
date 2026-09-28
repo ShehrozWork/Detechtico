@@ -17,6 +17,32 @@ def smtp_configured(settings: Settings | None = None) -> bool:
     return bool(cfg.smtp_host and cfg.smtp_username and cfg.smtp_password and cfg.smtp_from_email)
 
 
+def _smtp_failure_message(exc: BaseException) -> str:
+    """Map common SMTP failures to actionable (non-secret) client messages."""
+    if isinstance(exc, smtplib.SMTPAuthenticationError):
+        return "Email login failed. Check SMTP_USERNAME and SMTP_PASSWORD on the API host."
+    if isinstance(exc, smtplib.SMTPSenderRefused):
+        return "SMTP rejected the From address. Set SMTP_FROM_EMAIL to an allowed sender."
+    if isinstance(exc, smtplib.SMTPRecipientsRefused):
+        return "SMTP rejected the recipient address. Try a different email."
+    if isinstance(exc, (TimeoutError, smtplib.SMTPServerDisconnected, ConnectionError, OSError)):
+        return (
+            "Could not reach the SMTP server. Check SMTP_HOST, SMTP_PORT, firewall, "
+            "and that the API container can open outbound TCP."
+        )
+    if isinstance(exc, ssl.SSLError):
+        return "SMTP TLS failed. For port 587 use SMTP_USE_TLS=true; for 465 use SSL (not STARTTLS)."
+    text = str(exc).lower()
+    if "authentication" in text or "auth" in text or "username" in text or "password" in text:
+        return "Email login failed. Check SMTP_USERNAME and SMTP_PASSWORD on the API host."
+    if "timed out" in text or "timeout" in text:
+        return (
+            "SMTP connection timed out. Check SMTP_HOST/SMTP_PORT and outbound access "
+            "from the API host."
+        )
+    return "Could not send email. Please try again."
+
+
 def send_email(
     *,
     to_email: str,
@@ -58,13 +84,19 @@ def send_email(
             refused = smtp.send_message(message, from_addr=cfg.smtp_from_email, to_addrs=[to_email])
             if refused:
                 logger.error("SMTP refused recipients: %s", refused)
-                raise error(502, "email_send_failed", "Could not send email. Please try again.")
+                raise error(502, "email_send_failed", "SMTP rejected the recipient address. Try a different email.")
         logger.info("Email accepted by SMTP for %s subject=%s", to_email, subject)
     except Exception as exc:
         if hasattr(exc, "status_code"):
             raise
-        logger.exception("Failed to send email to %s", to_email)
-        raise error(502, "email_send_failed", "Could not send email. Please try again.") from None
+        logger.exception(
+            "Failed to send email to %s host=%s port=%s tls=%s",
+            to_email,
+            cfg.smtp_host,
+            cfg.smtp_port,
+            cfg.smtp_use_tls,
+        )
+        raise error(502, "email_send_failed", _smtp_failure_message(exc)) from None
 
 
 def send_signup_otp(to_email: str, otp: str, settings: Settings | None = None) -> None:
