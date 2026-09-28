@@ -132,13 +132,6 @@ async function parseBody<T>(response: Response, fallback: string): Promise<T> {
   if (response.status === 204) {
     return undefined as T;
   }
-  if (response.status === 502 || response.status === 504) {
-    throw new RequestError({
-      code: "proxy_error",
-      message:
-        "Upload failed through the hosting proxy (file too large or timed out). Use Dashboard → Import for ledger CSVs (max 5,000 rows), or upload a smaller statement file under ~4 MB.",
-    });
-  }
   if (response.status === 413) {
     throw new RequestError({
       code: "payload_too_large",
@@ -147,6 +140,19 @@ async function parseBody<T>(response: Response, fallback: string): Promise<T> {
   }
   const data: unknown = await response.json().catch(() => null);
   if (!response.ok) {
+    // Prefer the API's JSON error (e.g. email_send_failed). Only use the upload/proxy
+    // copy when the gateway returned an empty or non-API 502/504.
+    if (response.status === 502 || response.status === 504) {
+      const apiError = readApiError(data, "");
+      if (apiError.message) {
+        throw new RequestError(apiError);
+      }
+      throw new RequestError({
+        code: "proxy_error",
+        message:
+          "Upload failed through the hosting proxy (file too large or timed out). Use Dashboard → Import for ledger CSVs (max 5,000 rows), or upload a smaller statement file under ~4 MB.",
+      });
+    }
     throw new RequestError(readApiError(data, fallback));
   }
   if (data === null || data === undefined) {
