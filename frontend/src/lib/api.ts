@@ -188,12 +188,7 @@ export async function requestSignup(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
-  return parseBody<{
-    message: string;
-    email: string;
-    expires_in_seconds: number;
-    resend_after_seconds: number;
-  }>(response, "Unable to start signup.");
+  return parseBody<User>(response, "Unable to create your account.");
 }
 
 export async function confirmSignup(email: string, otp: string) {

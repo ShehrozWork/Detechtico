@@ -32,7 +32,6 @@ from app.schemas import (
     ResetPasswordRequest,
     RevertEmailChangeRequest,
     SignupRequest,
-    SignupRequestedOut,
     UpdateProfileRequest,
     UserOut,
     VerifyPasswordRequest,
@@ -53,7 +52,7 @@ from app.security import (
     verify_password,
 )
 from app.deps import get_current_user
-from app.services.mail import send_email_change_alert, send_email_change_otp, send_signup_otp
+from app.services.mail import send_email_change_alert, send_email_change_otp
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -133,8 +132,15 @@ def _revoke_all_refresh_tokens(db: Session, user_id) -> None:
         token.revoked_at = now
 
 
-@router.post("/signup", response_model=SignupRequestedOut)
-def signup(payload: SignupRequest, request: Request, db: Session = Depends(get_db)) -> SignupRequestedOut:
+@router.post("/signup", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+def signup(
+    payload: SignupRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> User:
+    # Email OTP is skipped while SMTP is unavailable. Restore the challenge
+    # flow (and send_signup_otp) when mail delivery is working again.
     ip = client_ip(request)
     if not limiter.allow(f"signup:{ip}", 5, 60):
         raise RATE_LIMITED
@@ -151,49 +157,20 @@ def signup(payload: SignupRequest, request: Request, db: Session = Depends(get_d
     if existing is not None:
         raise error(409, "email_taken", "An account with this email already exists.")
 
-    now = datetime.now(timezone.utc)
-    resend_cooldown = timedelta(seconds=60)
-    latest = db.scalar(
-        select(SignupChallenge)
-        .where(SignupChallenge.email == payload.email)
-        .order_by(SignupChallenge.created_at.desc())
-    )
-    if latest is not None and latest.created_at > now - resend_cooldown:
-        wait = int((latest.created_at + resend_cooldown - now).total_seconds()) + 1
-        raise error(
-            429,
-            "resend_cooldown",
-            f"Please wait {wait} second{'s' if wait != 1 else ''} before requesting another code.",
-        )
-
-    pending = db.scalars(
-        select(SignupChallenge).where(
-            SignupChallenge.email == payload.email,
-            SignupChallenge.consumed_at.is_(None),
-            SignupChallenge.expires_at > now,
-        )
-    ).all()
-    for challenge in pending:
-        challenge.consumed_at = now
-
-    otp = new_otp_code(6)
-    db.add(
-        SignupChallenge(
-            email=payload.email,
-            name=payload.name,
-            password_hash=hash_password(payload.password),
-            otp_hash=hash_token(otp),
-            expires_at=now + timedelta(minutes=10),
-        )
-    )
-    db.flush()
-    send_signup_otp(payload.email, otp)
-    return SignupRequestedOut(
-        message="We sent a verification code to your email address.",
+    user = User(
         email=payload.email,
-        expires_in_seconds=600,
-        resend_after_seconds=60,
+        name=payload.name,
+        password_hash=hash_password(payload.password),
     )
+    db.add(user)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise error(409, "email_taken", "An account with this email already exists.") from exc
+
+    _issue_session(response, db, user, request)
+    return user
 
 
 @router.post("/signup/confirm", response_model=UserOut, status_code=status.HTTP_201_CREATED)
