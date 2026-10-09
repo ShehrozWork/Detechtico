@@ -236,7 +236,10 @@ def _from_text(text: str) -> list[dict[str, Any]]:
 
 
 def _first_amount(text: str, label: str) -> float | None:
-    match = re.search(label + r"[^0-9(\-\n]{0,40}(\(?-?\$?\s*[\d,]+(?:\.\d+)?\)?)", text, re.I)
+    # Commas only count as thousands separators (",ddd"); otherwise a CSV/Excel row like
+    # "Total assets,6817420,5066360" would glue both year columns into one number.
+    number = r"(?:\d{1,3}(?:,\d{3})+(?!\d)|\d+)(?:\.\d+)?"
+    match = re.search(label + r"[^0-9(\-\n]{0,40}(\(?-?\$?\s*" + number + r"\)?)", text, re.I)
     return _to_amount(match.group(1)) if match else None
 
 
