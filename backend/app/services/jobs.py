@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.db import SessionLocal, AdminSessionLocal, admin_engine, set_rls_user
@@ -15,7 +16,9 @@ from app.services.anthropic_analysis import analyze_with_anthropic
 from app.services.risk_settings import get_or_create_risk_settings, settings_to_dict
 from app.services.learning import format_learning_feedback_for_prompt
 from app.services.llm_usage import LlmCallResult, record_llm_usage
+from app.services.dedupe import dedupe_findings
 from app.services.rules import run_rules
+from app.services.statement_types import check_statement_type, classify_statement, mismatch_error_code
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +67,15 @@ def recover_stale_jobs() -> None:
         logger.exception("Failed to recover stale analysis jobs")
 
 
+def _fail_job(db: Session, job: AnalysisJob, error_code: str, llm_status: str | None = None) -> None:
+    job.status = "failed"
+    job.error_code = error_code
+    if llm_status is not None:
+        job.llm_status = llm_status
+    job.finished_at = datetime.now(timezone.utc)
+    db.commit()
+
+
 def process_job(job_id: UUID) -> None:
     user_id = _job_user_id(job_id)
     if user_id is None:
@@ -98,7 +110,16 @@ def process_job(job_id: UUID) -> None:
             return
 
         content = extract_document(path, document.detected_type)
-        rule_findings = run_rules(content)
+
+        # Reject uploads that are clearly a different statement than the one selected,
+        # before spending a model call on them.
+        mismatch = check_statement_type(content.text, job.statement_type)
+        if mismatch is not None:
+            _fail_job(db, job, mismatch_error_code(mismatch), llm_status="skipped")
+            return
+        text_conclusive = classify_statement(content.text).conclusive
+
+        rule_findings = run_rules(content, job.statement_type)
         risk_settings = settings_to_dict(get_or_create_risk_settings(db, user_id))
         learning_feedback = format_learning_feedback_for_prompt(db, user_id)
 
@@ -116,6 +137,16 @@ def process_job(job_id: UUID) -> None:
             llm_status = llm_result.status
             job.model = llm_result.model if llm_status == "succeeded" else None
             _record_usage_admin(user_id=user_id, job_id=job.id, result=llm_result)
+            # Scanned PDFs and images have no text to classify; rely on the model's read.
+            if (
+                not text_conclusive
+                and job.statement_type
+                and llm_result.document_type
+                and llm_result.document_type != job.statement_type
+            ):
+                detected = "unknown" if llm_result.document_type == "other" else llm_result.document_type
+                _fail_job(db, job, mismatch_error_code(detected), llm_status=llm_status)
+                return
             if llm_status == "failed" and get_settings().analysis_require_llm:
                 job.status = "failed"
                 job.error_code = "analysis_failed"
@@ -144,7 +175,7 @@ def process_job(job_id: UUID) -> None:
                 db.commit()
                 return
 
-        for item in [*rule_findings, *llm_findings]:
+        for item in dedupe_findings([*rule_findings, *llm_findings]):
             db.add(
                 Finding(
                     job_id=job.id,

@@ -26,6 +26,7 @@ class LlmCallResult:
     cache_read_input_tokens: int = 0
     request_id: str | None = None
     error_code: str | None = None
+    document_type: str | None = None
 
 
 def record_llm_usage(

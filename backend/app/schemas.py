@@ -466,6 +466,26 @@ class AdminUserDetailOut(AdminUserListItem):
     recent_jobs: list[dict] = Field(default_factory=list)
 
 
+class AdminCreateUserRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=80)
+    email: EmailStr
+    password: str = Field(min_length=12, max_length=128)
+    staff_role: Optional[Literal["support", "billing_ops", "superadmin"]] = None
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        cleaned = " ".join(value.split())
+        if not cleaned:
+            raise ValueError("Name is required")
+        return cleaned
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: EmailStr) -> str:
+        return str(value).strip().lower()
+
+
 class DeactivateUserRequest(BaseModel):
     billing_action: Literal["leave", "cancel_at_period_end", "cancel_immediately"]
     reason: str = Field(min_length=1, max_length=500)

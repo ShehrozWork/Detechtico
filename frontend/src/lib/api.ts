@@ -477,6 +477,19 @@ export async function listAdminUsers(params?: { q?: string; is_active?: boolean 
   );
 }
 
+export async function createAdminUser(body: {
+  name: string;
+  email: string;
+  password: string;
+  staff_role: "support" | "billing_ops" | "superadmin" | null;
+}) {
+  const response = await apiFetch("/admin/users", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return parseBody<AdminUserDetail>(response, "Unable to create user.");
+}
+
 export async function getAdminUser(userId: string) {
   const response = await apiFetch(`/admin/users/${userId}`);
   return parseBody<AdminUserDetail>(response, "Unable to load user.");

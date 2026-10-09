@@ -106,8 +106,10 @@ def _from_tables(tables: list[pd.DataFrame]) -> list[dict[str, Any]]:
         if len(pairs) >= 3:
             counts = Counter(pairs)
             repeats = [(item, count) for item, count in counts.items() if count >= 3 and item[1] != 0]
+            duplicated_amount: float | None = None
             if repeats:
                 (desc, amount), count = max(repeats, key=lambda item: item[1])
+                duplicated_amount = round(amount, 2)
                 findings.append(
                     _finding(
                         "duplicate_lines",
@@ -121,7 +123,8 @@ def _from_tables(tables: list[pd.DataFrame]) -> list[dict[str, Any]]:
 
             amount_counts = Counter(round(value, 2) for value in values)
             popular_amount, popular_count = amount_counts.most_common(1)[0]
-            if popular_count >= 4 and popular_amount != 0:
+            # Skip when the same amount was already reported as duplicated line items.
+            if popular_count >= 4 and popular_amount != 0 and popular_amount != duplicated_amount:
                 findings.append(
                     _finding(
                         "repeated_amount",
@@ -229,40 +232,122 @@ def _from_text(text: str) -> list[dict[str, Any]]:
             )
         )
 
-    lowered = text.lower()
-    if "total assets" in lowered and ("total liabilities" in lowered or "equity" in lowered):
-        asset_match = re.search(r"total assets[^0-9\-]{0,40}([\d,\.]+)", text, re.I)
-        liab_match = re.search(r"total liabilities[^0-9\-]{0,40}([\d,\.]+)", text, re.I)
-        equity_match = re.search(r"(?:total )?(?:shareholders[' ]+)?equity[^0-9\-]{0,40}([\d,\.]+)", text, re.I)
-        assets = _to_amount(asset_match.group(1)) if asset_match else None
-        liabilities = _to_amount(liab_match.group(1)) if liab_match else None
-        equity = _to_amount(equity_match.group(1)) if equity_match else None
-        if assets is not None and liabilities is not None and equity is not None:
-            if abs(assets - (liabilities + equity)) > max(1.0, abs(assets) * 0.01):
+    return findings
+
+
+def _first_amount(text: str, label: str) -> float | None:
+    match = re.search(label + r"[^0-9(\-\n]{0,40}(\(?-?\$?\s*[\d,]+(?:\.\d+)?\)?)", text, re.I)
+    return _to_amount(match.group(1)) if match else None
+
+
+def _identity_checks(text: str, statement_type: str | None) -> list[dict[str, Any]]:
+    """Statement-specific arithmetic checks, run only for the matching statement type."""
+    findings: list[dict[str, Any]] = []
+
+    if statement_type in (None, "balance-sheet"):
+        assets = _first_amount(text, r"total assets")
+        liabilities = _first_amount(text, r"total liabilities(?! and)")
+        equity = _first_amount(text, r"total (?:stockholders['’]? |shareholders['’]? |owners['’]? )?equity")
+        combined = _first_amount(text, r"total liabilities and (?:stockholders['’]? |shareholders['’]? |owners['’]? )?equity")
+        if assets is not None:
+            if liabilities is not None and equity is not None:
+                rhs = liabilities + equity
+            else:
+                rhs = combined
+            if rhs is not None and abs(assets - rhs) > max(1.0, abs(assets) * 0.01):
                 findings.append(
                     _finding(
                         "balance_mismatch",
                         "Balance sheet identity does not hold",
-                        f"Total assets ({assets:,.2f}) do not equal liabilities plus equity ({liabilities + equity:,.2f}).",
+                        f"Total assets ({assets:,.2f}) do not equal liabilities plus equity ({rhs:,.2f}).",
                         "high",
                         location="Balance sheet totals",
                         confidence=0.85,
                     )
                 )
 
+    if statement_type == "income":
+        revenue = _first_amount(text, r"(?:total |net )?(?:revenues?|net sales)")
+        cogs = _first_amount(text, r"cost of (?:goods sold|sales|revenues?)")
+        gross = _first_amount(text, r"gross profit")
+        if revenue is not None and cogs is not None and gross is not None:
+            expected = revenue - abs(cogs)
+            if abs(expected - gross) > max(1.0, abs(revenue) * 0.01):
+                findings.append(
+                    _finding(
+                        "gross_profit_mismatch",
+                        "Gross profit does not reconcile",
+                        f"Revenue ({revenue:,.2f}) less cost of sales ({abs(cogs):,.2f}) is {expected:,.2f}, but gross profit is reported as {gross:,.2f}.",
+                        "high",
+                        location="Income statement",
+                        confidence=0.8,
+                    )
+                )
+
+    if statement_type == "cash-flow":
+        activity = r"net cash (?:provided by|used in|from|\(used in\)|provided by \(used in\)|\(used in\) provided by)[^\n]{0,10}"
+        operating = _first_amount(text, activity + r"operating activities")
+        investing = _first_amount(text, activity + r"investing activities")
+        financing = _first_amount(text, activity + r"financing activities")
+        net_change = _first_amount(text, r"net \(?(?:increase|decrease|change)\)?[^\n]{0,30}cash(?: and cash equivalents)?")
+        if None not in (operating, investing, financing, net_change):
+            total = operating + investing + financing  # type: ignore[operator]
+            # Statements often print the net change unsigned; compare magnitudes too.
+            if min(abs(total - net_change), abs(abs(total) - abs(net_change))) > max(1.0, abs(total) * 0.01):  # type: ignore[operator]
+                findings.append(
+                    _finding(
+                        "cash_flow_mismatch",
+                        "Cash flow sections do not sum to net change",
+                        f"Operating ({operating:,.2f}), investing ({investing:,.2f}) and financing ({financing:,.2f}) total {total:,.2f}, but the net change in cash is reported as {net_change:,.2f}.",
+                        "high",
+                        location="Statement of cash flows",
+                        confidence=0.8,
+                    )
+                )
+
     return findings
 
 
-def run_rules(content: ExtractedContent) -> list[dict[str, Any]]:
-    findings = _from_tables(content.tables)
-    if not findings:
-        findings.extend(_from_text(content.text))
-    elif content.text:
-        text_findings = _from_text(content.text)
-        seen = {item["rule_id"] for item in findings}
-        for item in text_findings:
-            if item["rule_id"] not in {"text_round_amounts", "text_repeated_amount"} or item["rule_id"] not in seen:
-                if item["rule_id"] not in seen:
-                    findings.append(item)
-                    seen.add(item["rule_id"])
+def _merge_by_rule(findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse the same rule firing on several tables/sheets into one finding."""
+    severity_rank = {"low": 0, "medium": 1, "high": 2}
+    merged: dict[str, dict[str, Any]] = {}
+    locations: dict[str, list[str]] = {}
+    for item in findings:
+        key = item["rule_id"]
+        if key not in merged:
+            merged[key] = dict(item)
+            locations[key] = [item["location"]] if item.get("location") else []
+            continue
+        current = merged[key]
+        if severity_rank[item["severity"]] > severity_rank[current["severity"]]:
+            kept_locations = locations[key]
+            merged[key] = dict(item)
+            current = merged[key]
+            locations[key] = kept_locations
+        if item.get("location") and item["location"] not in locations[key]:
+            locations[key].append(item["location"])
+    for key, item in merged.items():
+        if len(locations[key]) > 1:
+            item["location"] = ", ".join(locations[key])
+            item["detail"] = f"{item['detail']} The same pattern appears in {len(locations[key])} tables."
+    return list(merged.values())
+
+
+def run_rules(content: ExtractedContent, statement_type: str | None = None) -> list[dict[str, Any]]:
+    findings = _merge_by_rule(_from_tables(content.tables))
+    text_findings = _from_text(content.text)
+    if content.tables:
+        # Tabular text is just the tables serialized again; its numeric checks
+        # would restate the table findings, so keep only the keyword scan.
+        text_findings = [item for item in text_findings if item["rule_id"] == "risk_keywords"]
+    findings.extend(text_findings)
+    if statement_type is not None:
+        # Financial statements are routinely presented rounded (often in thousands),
+        # so round-figure checks meant for invoices and ledgers are just noise here.
+        findings = [item for item in findings if item["rule_id"] not in _ROUNDING_RULES]
+    findings.extend(_identity_checks(content.text, statement_type))
     return findings[:25]
+
+
+_ROUNDING_RULES = frozenset({"round_amounts", "text_round_amounts"})

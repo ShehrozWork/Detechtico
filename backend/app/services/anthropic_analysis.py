@@ -7,11 +7,21 @@ from typing import Any
 from app.config import get_settings
 from app.services.extract import ExtractedContent
 from app.services.llm_usage import LlmCallResult
+from app.services.statement_types import STATEMENT_LABELS, STATEMENT_TYPES
 
 FINDINGS_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
+        "document_type": {
+            "type": "string",
+            "enum": [*STATEMENT_TYPES, "other"],
+            "description": (
+                "Which financial statement this document is. If it contains the investigator's "
+                "selected statement (e.g. a full annual report), return the selected type. "
+                "Use 'other' for ledgers, invoices, bank statements, or non-financial documents."
+            ),
+        },
         "findings": {
             "type": "array",
             "maxItems": 15,
@@ -30,14 +40,32 @@ FINDINGS_SCHEMA = {
             },
         }
     },
-    "required": ["findings"],
+    "required": ["document_type", "findings"],
 }
 
 SYSTEM_PROMPT = """You are a forensic accountant reviewing extracted financial-document content.
 Only report issues that are directly supported by the provided extract or rule hits.
 Do not invent vendors, amounts, dates, or counterparties.
 If nothing suspicious is supported, return an empty findings array.
-Do not contradict deterministic rule hits; you may add distinct additional issues.
+
+Avoid repetition — this is the most important formatting rule:
+- Each finding must describe one distinct underlying issue. If several observations stem from the
+  same cause (e.g. the same amount repeated, the same account, the same totals not reconciling),
+  report it ONCE and mention the related observations inside that finding's detail.
+- Do NOT restate the deterministic rule hits. They are already shown to the investigator. Only add
+  a finding when it is a genuinely different issue, not a rewording or elaboration of a rule hit.
+- Prefer a few precise, well-evidenced findings over many overlapping ones. Never return two
+  findings with similar titles.
+
+Analyze the document as the statement type the investigator selected and apply checks that fit it:
+- Balance sheet: assets = liabilities + equity, current/non-current classification, unusual
+  receivables, inventory or related-party balances, unexplained equity movements.
+- Income statement: revenue recognition red flags, gross-margin anomalies, expense
+  capitalization or reclassification, unusual one-off gains, subtotals that do not foot.
+- Statement of cash flows: operating + investing + financing = net change in cash, earnings vs
+  operating cash divergence, misclassified flows, beginning/ending cash that does not roll forward.
+Also report in document_type which statement the document actually is.
+
 Respect the investigator's risk configuration: prioritize enabled detection focus areas,
 apply amount-alert and confidence thresholds when judging severity, and de-emphasize disabled areas.
 When investigator feedback history is provided, elevate patterns similar to confirmed findings
@@ -97,7 +125,7 @@ def analyze_with_anthropic(
     client = Anthropic(api_key=settings.anthropic_api_key, timeout=60.0, max_retries=1)
     feedback_block = learning_feedback.strip() if learning_feedback else ""
     user_text = (
-        f"Statement type: {statement_type or 'unspecified'}\n\n"
+        f"Statement type selected by investigator: {STATEMENT_LABELS.get(statement_type or '', 'unspecified')}\n\n"
         f"{format_risk_settings_for_prompt(risk)}\n\n"
         f"{feedback_block}\n\n"
         f"Deterministic rule hits:\n{json.dumps(rule_findings, default=str)[:8000]}\n\n"
@@ -155,6 +183,10 @@ def analyze_with_anthropic(
                 parsed = raw_input
             break
 
+    document_type = parsed.get("document_type")
+    if document_type not in (*STATEMENT_TYPES, "other"):
+        document_type = None
+
     findings: list[dict[str, Any]] = []
     for item in parsed.get("findings", []):
         confidence = item.get("confidence")
@@ -185,4 +217,5 @@ def analyze_with_anthropic(
         cache_creation_input_tokens=cache_write,
         cache_read_input_tokens=cache_read,
         request_id=str(request_id) if request_id else None,
+        document_type=document_type,
     )

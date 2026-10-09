@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import jwt
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request, Response
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.admin.audit import write_audit
@@ -46,6 +47,7 @@ from app.models import (
 from app.rate_limit import limiter
 from app.schemas import (
     AdminAuditItem,
+    AdminCreateUserRequest,
     AdminAuditListOut,
     AdminCompOut,
     AdminJobItem,
@@ -76,8 +78,10 @@ from app.security import (
     clear_step_up_cookie,
     create_step_up_token,
     decode_step_up_token,
+    hash_password,
     hash_token,
     new_refresh_token,
+    password_meets_policy,
     set_step_up_cookie,
 )
 from app.services.jobs import process_job
@@ -458,6 +462,47 @@ def list_users(
         )
     users = db.scalars(stmt.order_by(User.created_at.desc()).offset(offset).limit(limit)).all()
     return AdminUserListOut(items=[_user_list_item(u, db) for u in users], total=total)
+
+
+@router.post("/users", response_model=AdminUserDetailOut, status_code=201)
+def create_user(
+    payload: AdminCreateUserRequest,
+    actor: User = Depends(require_permission("users.create")),
+    _: User = Depends(require_step_up),
+    db: Session = Depends(get_admin_db),
+) -> AdminUserDetailOut:
+    if not password_meets_policy(payload.password):
+        raise error(
+            400,
+            "weak_password",
+            "Password must be 12–128 characters and include at least one letter and one number.",
+        )
+    if db.scalar(select(User).where(User.email == payload.email)) is not None:
+        raise error(409, "email_taken", "An account with this email already exists.")
+    actor_row = db.get(User, actor.id)
+    assert actor_row is not None
+    user = User(
+        email=payload.email,
+        name=payload.name,
+        password_hash=hash_password(payload.password),
+        staff_role=payload.staff_role,
+    )
+    db.add(user)
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        raise error(409, "email_taken", "An account with this email already exists.") from exc
+    write_audit(
+        db,
+        actor=actor_row,
+        action="user_create",
+        target_type="user",
+        target_id=user.id,
+        metadata={"email": user.email, "staff_role": payload.staff_role},
+    )
+    db.flush()
+    return _user_detail(db, user.id)
 
 
 @router.get("/users/{user_id}", response_model=AdminUserDetailOut)

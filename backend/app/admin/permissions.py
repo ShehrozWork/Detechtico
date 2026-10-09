@@ -22,6 +22,7 @@ PERMISSIONS: dict[str, int] = {
     "billing.cancel": 2,
     "billing.comp": 2,
     "users.trial": 2,
+    "users.create": 3,
     "users.deactivate": 3,
     "users.activate": 3,
     "jobs.requeue": 3,

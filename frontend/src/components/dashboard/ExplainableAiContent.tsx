@@ -12,6 +12,8 @@ import { ActionButton } from "@/components/dashboard/ActionButton";
 import { statementTypes, type StatementType } from "@/data/dashboard";
 import { getJob, setFindingDisposition } from "@/lib/api";
 import { getErrorMessage, type AnalysisJob, type Finding } from "@/lib/api-types";
+import { downloadFindingsReport } from "@/lib/findings-report";
+import { describeJobError } from "@/lib/job-errors";
 import { cn } from "@/utils/cn";
 
 type SeverityFilter = "all" | Finding["severity"];
@@ -124,6 +126,7 @@ export function ExplainableAiContent({ jobId }: ExplainableAiContentProps) {
   const [filter, setFilter] = useState<SeverityFilter>("all");
   const [expandedId, setExpandedId] = useState<string>("");
   const [dispositionPending, setDispositionPending] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -204,6 +207,18 @@ export function ExplainableAiContent({ jobId }: ExplainableAiContentProps) {
     }
   };
 
+  const downloadReport = async () => {
+    if (!job) return;
+    setDownloading(true);
+    try {
+      await downloadFindingsReport(job);
+    } catch (caught) {
+      setError(getErrorMessage(caught, "Unable to generate the report."));
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   return (
     <Container>
       <PageHeader
@@ -219,6 +234,17 @@ export function ExplainableAiContent({ jobId }: ExplainableAiContentProps) {
         <ActionButton href="/financial-statement-analysis" variant="ghost" size="sm">
           Manage uploads
         </ActionButton>
+        {job?.status === "succeeded" ? (
+          <ActionButton
+            type="button"
+            size="sm"
+            disabled={downloading}
+            onClick={() => void downloadReport()}
+          >
+            <Icon name="download" className="h-4 w-4" strokeWidth={2} />
+            {downloading ? "Preparing PDF…" : "Download report (PDF)"}
+          </ActionButton>
+        ) : null}
       </div>
 
       {!ready ? (
@@ -259,11 +285,7 @@ export function ExplainableAiContent({ jobId }: ExplainableAiContentProps) {
 
       {job?.status === "failed" ? (
         <Panel className="mt-5 px-6 py-10 text-center">
-          <p className="text-[15px] font-medium text-body">
-            This analysis failed
-            {job.error_code ? ` (${job.error_code})` : ""}. Choose another run or re-upload the
-            statement.
-          </p>
+          <p className="text-[15px] font-medium text-body">{describeJobError(job)}</p>
         </Panel>
       ) : null}
 

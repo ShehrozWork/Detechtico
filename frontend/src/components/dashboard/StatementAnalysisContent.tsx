@@ -15,6 +15,8 @@ import {
   type AnalysisJobSummary,
   type Finding,
 } from "@/lib/api-types";
+import { downloadFindingsReport } from "@/lib/findings-report";
+import { describeJobError, isStatementTypeMismatch } from "@/lib/job-errors";
 import { cn } from "@/utils/cn";
 
 const ACCEPT = ".csv,.json,.xlsx,.xls,.pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.webp,.tif,.tiff";
@@ -71,6 +73,7 @@ export function StatementAnalysisContent() {
   const [pending, setPending] = useState(false);
   const [loadingJobId, setLoadingJobId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   const refreshHistory = useCallback(async () => {
@@ -117,7 +120,7 @@ export function StatementAnalysisContent() {
     setPending(false);
     void refreshHistory();
     if (current.status === "failed") {
-      setError("Analysis failed. Please try another file or try again.");
+      setError(describeJobError(current));
     }
   };
 
@@ -191,6 +194,18 @@ export function StatementAnalysisContent() {
     }
   };
 
+  const downloadReport = async () => {
+    if (!job) return;
+    setDownloading(true);
+    try {
+      await downloadFindingsReport(job);
+    } catch (caught) {
+      setError(getErrorMessage(caught, "Unable to generate the report."));
+    } finally {
+      setDownloading(false);
+    }
+  };
+
   const findings = job?.findings ?? [];
   const inFlight = pending || job?.status === "queued" || job?.status === "running";
 
@@ -209,8 +224,9 @@ export function StatementAnalysisContent() {
           <div>
             <h2 className="text-[18px] font-bold text-ink">Upload Statement</h2>
             <p className="mt-1 text-[14px] font-light text-subtle">
-              Select the statement type and upload your file. The server detects
-              the format automatically and stores the analysis for later.
+              Select the statement type and upload that statement. The upload must
+              match the selected type — e.g. Balance Sheet accepts only balance sheets.
+              The analysis is saved to your account.
             </p>
           </div>
         </div>
@@ -365,10 +381,12 @@ export function StatementAnalysisContent() {
 
       {job?.status === "failed" ? (
         <Panel className="mt-5 p-5 sm:p-6">
-          <h2 className="text-[18px] font-bold text-ink">Analysis failed</h2>
+          <h2 className="text-[18px] font-bold text-ink">
+            {isStatementTypeMismatch(job) ? "Wrong statement type" : "Analysis failed"}
+          </h2>
           <p className="mt-1.5 text-[14px] font-light text-subtle">
-            {job.original_filename ?? "This upload"} could not be analyzed
-            {job.error_code ? ` (${job.error_code})` : ""}. You can delete it and try again.
+            {job.original_filename ? `${job.original_filename}: ` : ""}
+            {describeJobError(job)}
           </p>
           <div className="mt-4">
             <ActionButton
@@ -399,6 +417,15 @@ export function StatementAnalysisContent() {
             </p>
           ) : null}
           <div className="mt-4 flex flex-wrap gap-2">
+            <ActionButton
+              type="button"
+              size="sm"
+              disabled={downloading}
+              onClick={() => void downloadReport()}
+            >
+              <Icon name="download" className="h-4 w-4" strokeWidth={2} />
+              {downloading ? "Preparing PDF…" : "Download report (PDF)"}
+            </ActionButton>
             {findings.length ? (
               <ActionButton
                 href={`/dashboard/explainable-ai/${job.id}`}
