@@ -23,7 +23,7 @@ export function describeJobError(job: Pick<AnalysisJob, "error_code" | "statemen
     const detectedLabel = statementLabel[detected];
     return detectedLabel
       ? `This document looks like ${withArticle(detectedLabel)}, not ${withArticle(selected)}. Select "${detectedLabel.replace(" statement", "")}" as the statement type and upload it again, or upload an actual ${selected}.`
-      : `This document doesn't appear to be ${withArticle(selected)}. Upload an actual ${selected}, or choose the statement type that matches the document.`;
+      : `This document doesn't appear to be a Balance Sheet, Income Statement, or Cash Flow statement, so it can't be analyzed as ${withArticle(selected)}. If it's a list of transactions or payments (a ledger), upload it under Dashboard → Import instead.`;
   }
   if (code === "file_missing" || code === "document_missing") {
     return "The uploaded file is no longer available. Upload it again.";

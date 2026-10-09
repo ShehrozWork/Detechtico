@@ -1,0 +1,26 @@
+Northwind Manufacturing Inc. - Balance Sheet,FY2025,FY2024
+(USD),,
+ASSETS,,
+Cash and cash equivalents,184320,412870
+Accounts receivable,1842650,926410
+Receivable from director (related party),350000,0
+Inventories,1218940,1104300
+Prepaid expenses,48210,51330
+Suspense account,275000,0
+Total current assets,3919120,2494910
+"Property, plant and equipment, net",2486300,2391450
+Intangible assets,412000,180000
+Total non-current assets,2898300,2571450
+Total assets,6817420,5066360
+LIABILITIES,,
+Accounts payable,1104820,987630
+Accrued liabilities,213440,198210
+Short-term borrowings,850000,400000
+Total current liabilities,2168260,1585840
+Long-term debt,1600000,1450000
+Total liabilities,3768260,3035840
+EQUITY,,
+Common stock,500000,500000
+Retained earnings,2249160,1530520
+Total stockholders' equity,2749160,2030520
+Total liabilities and stockholders' equity,6517420,5066360
