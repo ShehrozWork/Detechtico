@@ -3,7 +3,7 @@
 Architecture today:
 
 - **Frontend:** Vercel (`https://detechtico.vercel.app`)
-- **API + Postgres:** Docker Compose on Paisol (`docker-compose.prod.yml`, API on host port **8211**)
+- **API + Postgres:** Docker Compose on Paisol (`docker-compose.prod.yml`, API on host port **9211**)
 - Browser → Vercel origin → Next.js rewrites (`API_PROXY_TARGET`) → Paisol API
 
 Do **not** set `NEXT_PUBLIC_API_URL` in Vercel. Leave it empty so cookies stay same-origin on HTTPS.
@@ -40,7 +40,7 @@ docker compose -f docker-compose.prod.yml up -d --build
 Container start runs `alembic upgrade head` then uvicorn. Confirm:
 
 ```bash
-curl -sS http://127.0.0.1:8211/health
+curl -sS http://127.0.0.1:9211/health
 docker compose -f docker-compose.prod.yml logs api --tail 80
 ```
 
@@ -54,7 +54,7 @@ Vercel env:
 
 | Variable | Value |
 |----------|--------|
-| `API_PROXY_TARGET` | `http://<SERVER_PUBLIC_IP>:8211` (or HTTPS origin if you terminate TLS in front of the API) |
+| `API_PROXY_TARGET` | `http://<SERVER_PUBLIC_IP>:9211` (or HTTPS origin if you terminate TLS in front of the API) |
 | `NEXT_PUBLIC_API_URL` | **unset / empty** |
 
 Redeploy after pulling admin proxy fixes in `frontend/next.config.ts` (JSON `beforeFiles` rewrite so `/admin` UI pages do not swallow API calls).
@@ -87,6 +87,6 @@ Do not reuse local/dev admin passwords or TOTP secrets in production.
 
 ## 6. Optional hardening
 
-- Put nginx/Caddy TLS in front of `:8211` and point `API_PROXY_TARGET` at HTTPS.
+- Put nginx/Caddy TLS in front of `:9211` and point `API_PROXY_TARGET` at HTTPS.
 - Stop treating committed `.env.production` as the long-term secret store; inject secrets only on the host.
 - Rotate DB passwords + `JWT_SECRET` if they were ever exposed outside the server.

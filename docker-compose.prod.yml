@@ -27,9 +27,9 @@ services:
       DATABASE_URL: postgresql://detechtico_app:B4jH6Vt9Km3Zp2Wx7NqC@db:5432/detechtico
       UPLOAD_DIR: /app/uploads
       CORS_ORIGINS: https://detechtico.vercel.app
-    # Public so Vercel rewrites can reach the API. Old stack stays on 8210.
+    # Public so Vercel rewrites can reach the API. Host only exposes 9101-9299 publicly.
     ports:
-      - "8211:8000"
+      - "9211:8000"
     volumes:
       - detechtico_v2_uploads:/app/uploads
     depends_on:
